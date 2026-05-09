@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.0
+
+- Added `--html-output PATH` for writing a static HTML dashboard summary alongside existing Markdown or JSON output.
+- HTML summaries include generated timestamp, overall status, summary counts, per-report rows, top warnings/errors, baseline comparison, and SARIF report details when present.
+- Escaped all report-derived HTML content before rendering.
+- Added a small synthetic SARIF sample report under `examples/reports`.
+
 ## 0.3.0
 
 - Added SARIF 2.1.0 ingestion for local code scanning reports.

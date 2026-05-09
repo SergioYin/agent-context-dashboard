@@ -9,7 +9,7 @@ from pathlib import Path
 
 from agent_context_dashboard.cli import _has_strict_failures, main
 from agent_context_dashboard.compare import ComparisonItem, ComparisonResult, compare_to_baseline, load_baseline
-from agent_context_dashboard.render import render_json
+from agent_context_dashboard.render import render_html, render_json
 from agent_context_dashboard.reports import ReportParseError, load_reports, normalize_report
 
 
@@ -122,6 +122,25 @@ class NormalizationTests(unittest.TestCase):
 
 
 class LoadingAndCliTests(unittest.TestCase):
+    def test_html_renderer_escapes_report_content(self) -> None:
+        card = normalize_report(
+            Path("unsafe.json"),
+            {
+                "tool": {"name": "agent-context-audit"},
+                "repository": "<script>alert('x')</script>",
+                "summary": "A & B < C",
+                "findings": [{"severity": "warning", "message": "<b>Check owner</b> & docs"}],
+            },
+        )
+
+        html = render_html([card])
+
+        self.assertIn("&lt;script&gt;alert(&#x27;x&#x27;)&lt;/script&gt;", html)
+        self.assertIn("A &amp; B &lt; C", html)
+        self.assertIn("&lt;b&gt;Check owner&lt;/b&gt; &amp; docs", html)
+        self.assertNotIn("<script>alert", html)
+        self.assertNotIn("<b>Check owner</b>", html)
+
     def test_malformed_json_error(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp)
@@ -215,6 +234,27 @@ class LoadingAndCliTests(unittest.TestCase):
             self.assertIn("agent-context-lint", dashboard)
             self.assertIn("Reports scanned: 1", dashboard)
 
+    def test_cli_writes_html_output_file_alongside_markdown(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            reports = root / "reports"
+            reports.mkdir()
+            (reports / "lint.json").write_text(
+                json.dumps({"scanned_files": ["AGENTS.md"], "summary": {"average_score": 100}, "issues": []}),
+                encoding="utf-8",
+            )
+            markdown_output = root / "dashboard.md"
+            html_output = root / "dashboard.html"
+
+            exit_code = main([str(reports), "--output", str(markdown_output), "--html-output", str(html_output)])
+
+            self.assertEqual(exit_code, 0)
+            self.assertIn("Reports scanned: 1", markdown_output.read_text(encoding="utf-8"))
+            html = html_output.read_text(encoding="utf-8")
+            self.assertIn("<!doctype html>", html)
+            self.assertIn("Agent Context Asset Health Dashboard", html)
+            self.assertIn("agent-context-lint", html)
+
     def test_cli_prints_json_to_stdout(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             reports = Path(tmp)
@@ -267,6 +307,65 @@ class LoadingAndCliTests(unittest.TestCase):
             self.assertEqual(report["details"]["sarif_version"], "2.1.0")
             self.assertEqual(report["details"]["results"], 1)
             self.assertEqual(report["warnings"], ["EX001"])
+
+    def test_html_includes_baseline_and_sarif_sections(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            reports = Path(tmp) / "reports"
+            reports.mkdir()
+            (reports / "scan.json").write_text(
+                json.dumps(
+                    {
+                        "version": "2.1.0",
+                        "runs": [
+                            {
+                                "tool": {"driver": {"name": "Example SARIF Tool"}},
+                                "results": [{"level": "warning", "ruleId": "EX001"}],
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            baseline = Path(tmp) / "baseline.json"
+            baseline.write_text(
+                json.dumps(
+                    {
+                        "generated_at": "2026-05-09T00:00:00+00:00",
+                        "summary": {"reports_scanned": 1},
+                        "reports": [
+                            {
+                                "source": "scan.json",
+                                "tool": "sarif",
+                                "status": "pass",
+                                "risk_count": 0,
+                                "warning_count": 0,
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            output = Path(tmp) / "dashboard.html"
+            markdown_output = Path(tmp) / "dashboard.md"
+
+            exit_code = main(
+                [
+                    str(reports),
+                    "--baseline",
+                    str(baseline),
+                    "--output",
+                    str(markdown_output),
+                    "--html-output",
+                    str(output),
+                ]
+            )
+
+            self.assertEqual(exit_code, 0)
+            html = output.read_text(encoding="utf-8")
+            self.assertIn("Baseline Comparison", html)
+            self.assertIn("SARIF Reports", html)
+            self.assertIn("warnings increased from 0 to 1", html)
+            self.assertIn("results: 1", html)
 
     def test_cli_writes_json_output_file(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

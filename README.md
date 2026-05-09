@@ -1,6 +1,6 @@
 # agent-context-dashboard
 
-`agent-context-dashboard` is a zero-dependency Python CLI that aggregates local JSON outputs from agent context toolchains into one Markdown or JSON asset health dashboard.
+`agent-context-dashboard` is a zero-dependency Python CLI that aggregates local JSON outputs from agent context toolchains into Markdown, JSON, and static HTML asset health dashboards.
 
 It is built for maintainers and consultants operating multiple AI-agent context or instruction repositories who need a quick portfolio summary without SaaS, hosted services, or external packages.
 
@@ -11,6 +11,7 @@ It is built for maintainers and consultants operating multiple AI-agent context 
 - Keeps unknown JSON visible as warning cards instead of dropping it.
 - Generates a README/Feishu-friendly Markdown dashboard with summary counts, report cards, risks, warnings, and next actions.
 - Emits machine-readable JSON for local automation.
+- Writes a static, escaped HTML summary for local review or sharing.
 - Compares current output against a previous JSON dashboard to surface regressions.
 
 ## Install From Source
@@ -25,6 +26,7 @@ For local development without installing:
 
 ```bash
 python -m agent_context_dashboard examples/reports --output examples/DASHBOARD.md
+python -m agent_context_dashboard examples/reports --output examples/DASHBOARD.md --html-output examples/DASHBOARD.html
 ```
 
 ## Usage
@@ -39,6 +41,7 @@ Sample command:
 
 ```bash
 python -m agent_context_dashboard build examples/reports --output examples/DASHBOARD.md
+python -m agent_context_dashboard build examples/reports --output examples/DASHBOARD.md --html-output examples/DASHBOARD.html
 ```
 
 SARIF files can live beside the other JSON reports. For example, include SARIF emitted by `agent-instruction-guard` and build the dashboard from that shared report directory:
@@ -57,6 +60,15 @@ Markdown is the default output format. Use JSON for scripts:
 python -m agent_context_dashboard examples/reports --format json
 python -m agent_context_dashboard examples/reports --format json --output examples/DASHBOARD.json
 ```
+
+Use `--html-output` to write a static HTML summary alongside Markdown or JSON output:
+
+```bash
+python -m agent_context_dashboard examples/reports --output examples/DASHBOARD.md --html-output examples/DASHBOARD.html
+python -m agent_context_dashboard examples/reports --format json --output examples/DASHBOARD.json --html-output examples/DASHBOARD.html
+```
+
+The HTML dashboard includes the generated timestamp, overall status, summary counts, per-report rows, top warnings/errors, baseline comparison when `--baseline` is used, and SARIF report details when SARIF files are present.
 
 By default, only top-level `*.json` files in the reports directory are read. Use `--recursive` for multi-repo report workspaces where companion tools write under per-repo subdirectories:
 
@@ -86,6 +98,7 @@ Compare against a previous dashboard JSON with `--baseline`. The baseline must b
 python -m agent_context_dashboard examples/reports --format json --output /tmp/baseline-dashboard.json
 python -m agent_context_dashboard examples/reports --baseline /tmp/baseline-dashboard.json --output /tmp/dashboard.md
 python -m agent_context_dashboard examples/reports --baseline /tmp/baseline-dashboard.json --format json --output /tmp/dashboard.json
+python -m agent_context_dashboard examples/reports --baseline /tmp/baseline-dashboard.json --output /tmp/dashboard.md --html-output /tmp/dashboard.html
 ```
 
 Baseline comparison detects:
@@ -102,6 +115,7 @@ With `--strict`, baseline regressions fail the command. `resolved_risk` items do
 ```bash
 python -m agent_context_dashboard examples/reports --baseline /tmp/baseline-dashboard.json --strict
 python -m agent_context_dashboard examples/reports --baseline /tmp/baseline-dashboard.json --format json --strict
+python -m agent_context_dashboard examples/reports --baseline /tmp/baseline-dashboard.json --strict --html-output /tmp/dashboard.html
 ```
 
 ## Supported Report Schemas

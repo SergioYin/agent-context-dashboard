@@ -1,0 +1,21 @@
+{
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "Example Static Check"
+        }
+      },
+      "results": [
+        {
+          "level": "warning",
+          "ruleId": "EXAMPLE001",
+          "message": {
+            "text": "Synthetic sample warning for dashboard display."
+          }
+        }
+      ]
+    }
+  ]
+}
