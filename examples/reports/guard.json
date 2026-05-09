@@ -1,0 +1,17 @@
+{
+  "summary": {
+    "high": 1,
+    "medium": 0,
+    "low": 0
+  },
+  "suppressed": 2,
+  "findings": [
+    {
+      "severity": "high",
+      "rule": "destructive_command",
+      "message": "Contains destructive shell command patterns.",
+      "path": "AGENTS.md",
+      "line": 12
+    }
+  ]
+}

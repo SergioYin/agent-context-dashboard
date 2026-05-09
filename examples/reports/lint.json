@@ -1,0 +1,21 @@
+{
+  "root": "/work/client-alpha-context",
+  "scanned_files": ["AGENTS.md"],
+  "issues": [
+    {
+      "severity": "warn",
+      "code": "missing_commands",
+      "message": "No concrete shell commands detected; include copy-pasteable build/test commands.",
+      "path": "AGENTS.md"
+    }
+  ],
+  "summary": {
+    "files_scanned": 1,
+    "issues": 1,
+    "error": 0,
+    "warn": 1,
+    "info": 0,
+    "average_score": 85.0
+  },
+  "exit_code": 0
+}

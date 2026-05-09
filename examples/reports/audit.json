@@ -1,0 +1,20 @@
+{
+  "tool": {"name": "agent-context-audit", "version": "0.1.1"},
+  "scanned_root": "/work/client-alpha-context",
+  "overall_score": 82,
+  "grade": "B",
+  "summary": {
+    "score": 82,
+    "grade": "B",
+    "categories_passed": 8,
+    "categories_total": 11,
+    "warnings": 1
+  },
+  "findings": [
+    {
+      "severity": "warning",
+      "message": "Architecture notes are missing.",
+      "recommendation": "Add ARCHITECTURE.md or docs/design.md."
+    }
+  ]
+}
