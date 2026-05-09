@@ -5,14 +5,21 @@ import sys
 from pathlib import Path
 
 from . import __version__
+from .compare import ComparisonResult, compare_to_baseline, load_baseline
 from .models import ReportCard
 from .render import render_json, render_markdown
 from .reports import DashboardError, load_reports
 
 
-def build_dashboard(input_dir: Path, output: Path | None, output_format: str = "markdown") -> str:
+def build_dashboard(
+    input_dir: Path,
+    output: Path | None,
+    output_format: str = "markdown",
+    baseline: Path | None = None,
+) -> str:
     cards = load_reports(input_dir)
-    dashboard = render_json(cards) if output_format == "json" else render_markdown(cards)
+    comparison = compare_to_baseline(cards, load_baseline(baseline)) if baseline else None
+    dashboard = render_json(cards, comparison=comparison) if output_format == "json" else render_markdown(cards, comparison=comparison)
     if output:
         output.parent.mkdir(parents=True, exist_ok=True)
         output.write_text(dashboard, encoding="utf-8")
@@ -30,7 +37,12 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         cards = load_reports(args.input_dir)
-        dashboard = render_json(cards) if args.format == "json" else render_markdown(cards)
+        comparison = compare_to_baseline(cards, load_baseline(args.baseline)) if args.baseline else None
+        dashboard = (
+            render_json(cards, comparison=comparison)
+            if args.format == "json"
+            else render_markdown(cards, comparison=comparison)
+        )
         if args.output:
             args.output.parent.mkdir(parents=True, exist_ok=True)
             args.output.write_text(dashboard, encoding="utf-8")
@@ -43,7 +55,7 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.output is None:
         print(dashboard, end="" if dashboard.endswith("\n") else "\n")
-    if args.strict and _has_strict_failures(cards):
+    if args.strict and _has_strict_failures(cards, comparison):
         return 1
     return 0
 
@@ -56,6 +68,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("input_dir", nargs="?", type=Path, help="Directory containing JSON reports.")
     parser.add_argument("-o", "--output", type=Path, help="Write dashboard output to this file.")
     parser.add_argument("--format", choices=("markdown", "json"), default="markdown", help="Dashboard output format.")
+    parser.add_argument("--baseline", type=Path, help="Compare against a prior JSON dashboard produced by --format json.")
     parser.add_argument(
         "--strict",
         action="store_true",
@@ -84,7 +97,9 @@ def _build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _has_strict_failures(cards: list[ReportCard]) -> bool:
+def _has_strict_failures(cards: list[ReportCard], comparison: ComparisonResult | None = None) -> bool:
+    if comparison is not None and comparison.has_regressions:
+        return True
     strict_statuses = {"blocked", "error", "risky", "unknown"}
     for card in cards:
         if card.is_risky or card.warning_count:

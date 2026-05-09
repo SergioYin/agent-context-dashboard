@@ -7,7 +7,8 @@ from contextlib import redirect_stdout
 from io import StringIO
 from pathlib import Path
 
-from agent_context_dashboard.cli import main
+from agent_context_dashboard.cli import _has_strict_failures, main
+from agent_context_dashboard.compare import ComparisonItem, ComparisonResult
 from agent_context_dashboard.reports import ReportParseError, load_reports, normalize_report
 
 
@@ -176,6 +177,115 @@ class LoadingAndCliTests(unittest.TestCase):
             (reports / "unknown.json").write_text(json.dumps({"tool": "new-tool"}), encoding="utf-8")
 
             self.assertEqual(main([str(reports), "--strict", "--output", str(reports / "dashboard.md")]), 1)
+
+    def test_cli_returns_error_for_malformed_baseline(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            reports = Path(tmp) / "reports"
+            reports.mkdir()
+            (reports / "lint.json").write_text(
+                json.dumps({"scanned_files": ["AGENTS.md"], "summary": {"average_score": 100}, "issues": []}),
+                encoding="utf-8",
+            )
+            baseline = Path(tmp) / "baseline.json"
+            baseline.write_text("{broken", encoding="utf-8")
+
+            self.assertEqual(main([str(reports), "--baseline", str(baseline)]), 2)
+
+    def test_cli_json_includes_baseline_comparison(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            reports = Path(tmp) / "reports"
+            reports.mkdir()
+            (reports / "lint.json").write_text(
+                json.dumps(
+                    {
+                        "scanned_files": ["AGENTS.md"],
+                        "summary": {"average_score": 85},
+                        "issues": [{"severity": "warn", "message": "Owner missing"}],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            baseline = Path(tmp) / "baseline.json"
+            baseline.write_text(
+                json.dumps(
+                    {
+                        "generated_at": "2026-05-09T00:00:00+00:00",
+                        "summary": {"reports_scanned": 1},
+                        "reports": [
+                            {
+                                "source": "lint.json",
+                                "tool": "agent-context-lint",
+                                "status": "pass",
+                                "risk_count": 0,
+                                "warning_count": 0,
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            output = Path(tmp) / "dashboard.json"
+
+            exit_code = main([str(reports), "--baseline", str(baseline), "--format", "json", "--output", str(output)])
+
+            self.assertEqual(exit_code, 0)
+            payload = json.loads(output.read_text(encoding="utf-8"))
+            self.assertEqual(payload["comparison"]["summary"]["new_risk"], 1)
+            self.assertEqual(payload["comparison"]["summary"]["increased_warnings"], 1)
+
+    def test_strict_fails_for_baseline_regression_when_report_passes(self) -> None:
+        cards = [
+            normalize_report(
+                Path("lint.json"),
+                {"scanned_files": ["AGENTS.md"], "summary": {"average_score": 100}, "issues": []},
+            )
+        ]
+        comparison = ComparisonResult(
+            summary={"total_items": 1, "regressions": 1},
+            items=[
+                ComparisonItem(
+                    kind="new_unknown_schema",
+                    source="other.json",
+                    tool="unknown",
+                    message="regression",
+                    current_warning_count=1,
+                )
+            ],
+        )
+
+        self.assertTrue(_has_strict_failures(cards, comparison))
+
+    def test_strict_ignores_resolved_risk_when_current_report_passes(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            reports = Path(tmp) / "reports"
+            reports.mkdir()
+            (reports / "lint.json").write_text(
+                json.dumps({"scanned_files": ["AGENTS.md"], "summary": {"average_score": 100}, "issues": []}),
+                encoding="utf-8",
+            )
+            baseline = Path(tmp) / "baseline.json"
+            baseline.write_text(
+                json.dumps(
+                    {
+                        "generated_at": "2026-05-09T00:00:00+00:00",
+                        "summary": {"reports_scanned": 1},
+                        "reports": [
+                            {
+                                "source": "lint.json",
+                                "tool": "agent-context-lint",
+                                "status": "fail",
+                                "risk_count": 1,
+                                "warning_count": 1,
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            output = Path(tmp) / "dashboard.md"
+
+            self.assertEqual(main([str(reports), "--baseline", str(baseline), "--strict", "--output", str(output)]), 0)
 
 
 if __name__ == "__main__":

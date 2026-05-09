@@ -4,10 +4,15 @@ import json
 from datetime import datetime, timezone
 from typing import Any
 
+from .compare import ComparisonResult, comparison_payload
 from .models import ReportCard
 
 
-def render_markdown(cards: list[ReportCard], generated_at: datetime | None = None) -> str:
+def render_markdown(
+    cards: list[ReportCard],
+    generated_at: datetime | None = None,
+    comparison: ComparisonResult | None = None,
+) -> str:
     stamp = generated_at or datetime.now(timezone.utc)
     summary = _summary_counts(cards)
     lines: list[str] = [
@@ -46,6 +51,9 @@ def render_markdown(cards: list[ReportCard], generated_at: datetime | None = Non
         lines.append("No risks or warnings were detected.")
     lines.append("")
 
+    if comparison is not None:
+        lines.extend(_render_comparison(comparison))
+
     lines.extend(["## Next Actions", ""])
     actions = _next_actions(cards)
     if actions:
@@ -57,14 +65,22 @@ def render_markdown(cards: list[ReportCard], generated_at: datetime | None = Non
     return "\n".join(lines)
 
 
-def render_json(cards: list[ReportCard], generated_at: datetime | None = None) -> str:
-    payload = dashboard_payload(cards, generated_at=generated_at)
+def render_json(
+    cards: list[ReportCard],
+    generated_at: datetime | None = None,
+    comparison: ComparisonResult | None = None,
+) -> str:
+    payload = dashboard_payload(cards, generated_at=generated_at, comparison=comparison)
     return json.dumps(payload, indent=2, sort_keys=True) + "\n"
 
 
-def dashboard_payload(cards: list[ReportCard], generated_at: datetime | None = None) -> dict[str, Any]:
+def dashboard_payload(
+    cards: list[ReportCard],
+    generated_at: datetime | None = None,
+    comparison: ComparisonResult | None = None,
+) -> dict[str, Any]:
     stamp = generated_at or datetime.now(timezone.utc)
-    return {
+    payload = {
         "generated_at": stamp.replace(microsecond=0).isoformat(),
         "summary": _summary_counts(cards),
         "reports": [_report_payload(card) for card in cards],
@@ -72,6 +88,9 @@ def dashboard_payload(cards: list[ReportCard], generated_at: datetime | None = N
         "next_actions": _next_actions(cards)
         or ["Add JSON reports from agent-context-audit, agent-context-lint, or agent-instruction-guard."],
     }
+    if comparison is not None:
+        payload["comparison"] = comparison_payload(comparison)
+    return payload
 
 
 def _render_card(card: ReportCard) -> list[str]:
@@ -145,6 +164,27 @@ def _risk_payload(cards: list[ReportCard]) -> list[dict[str, str]]:
                 }
             )
     return items
+
+
+def _render_comparison(comparison: ComparisonResult) -> list[str]:
+    summary = comparison.summary
+    lines = [
+        "## Baseline Comparison",
+        "",
+        f"- Total comparison items: {summary['total_items']}",
+        f"- Regression items: {summary['regressions']}",
+        f"- New unknown schemas: {summary['new_unknown_schema']}",
+        f"- New risks: {summary['new_risk']}",
+        f"- Increased warnings: {summary['increased_warnings']}",
+        f"- Resolved risks: {summary['resolved_risk']}",
+        "",
+    ]
+    if comparison.items:
+        lines.extend(f"- {item.kind}: {item.message}" for item in comparison.items)
+    else:
+        lines.append("- No baseline changes detected.")
+    lines.append("")
+    return lines
 
 
 def _next_actions(cards: list[ReportCard]) -> list[str]:

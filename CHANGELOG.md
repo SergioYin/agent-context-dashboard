@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.0
+
+- Added `--baseline PATH` for comparing current normalized reports against a prior JSON dashboard.
+- Added Markdown and JSON baseline comparison summaries with regression items for new unknown schemas, new risks, and increased warnings.
+- Added resolved-risk comparison items without making them strict-mode failures.
+- Strict mode now also fails when baseline comparison includes regression items.
+
 ## 0.1.1
 
 - Added `--format markdown|json` with Markdown remaining the default.

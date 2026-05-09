@@ -11,6 +11,7 @@ It is built for maintainers and consultants operating multiple AI-agent context 
 - Keeps unknown JSON visible as warning cards instead of dropping it.
 - Generates a README/Feishu-friendly Markdown dashboard with summary counts, report cards, risks, warnings, and next actions.
 - Emits machine-readable JSON for local automation.
+- Compares current output against a previous JSON dashboard to surface regressions.
 
 ## Install From Source
 
@@ -57,6 +58,30 @@ python -m agent_context_dashboard examples/reports --format json --strict --outp
 ```
 
 Without `--strict`, the CLI exits 0 after successful IO and JSON parsing even when the dashboard contains risks or unknown schemas.
+
+Compare against a previous dashboard JSON with `--baseline`. The baseline must be a JSON dashboard produced by `--format json`:
+
+```bash
+python -m agent_context_dashboard examples/reports --format json --output /tmp/baseline-dashboard.json
+python -m agent_context_dashboard examples/reports --baseline /tmp/baseline-dashboard.json --output /tmp/dashboard.md
+python -m agent_context_dashboard examples/reports --baseline /tmp/baseline-dashboard.json --format json --output /tmp/dashboard.json
+```
+
+Baseline comparison detects:
+
+- `new_unknown_schema`: current report tool is unknown and the same source/tool key was absent before.
+- `new_risk`: current report is risky and the same source/tool key was not risky or was absent before.
+- `increased_warnings`: current warning count is higher than the same source/tool key in the baseline.
+- `resolved_risk`: the baseline was risky and the current same source/tool key is no longer risky.
+
+Markdown output includes a `## Baseline Comparison` section when `--baseline` is provided. JSON output includes `comparison.summary` and `comparison.items`.
+
+With `--strict`, baseline regressions fail the command. `resolved_risk` items do not fail strict mode:
+
+```bash
+python -m agent_context_dashboard examples/reports --baseline /tmp/baseline-dashboard.json --strict
+python -m agent_context_dashboard examples/reports --baseline /tmp/baseline-dashboard.json --format json --strict
+```
 
 ## Supported Report Schemas
 
