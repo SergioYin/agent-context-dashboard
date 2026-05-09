@@ -74,6 +74,8 @@ def _discover_json_reports(directory: Path, recursive: bool) -> list[Path]:
 def normalize_report(path: Path | str, data: Any) -> ReportCard:
     source_path = Path(path)
     if isinstance(data, dict):
+        if _looks_like_sarif(data):
+            return _normalize_sarif(source_path, data)
         if _looks_like_audit(data):
             return _normalize_audit(source_path, data)
         if _looks_like_lint(data):
@@ -109,6 +111,69 @@ def _looks_like_guard(data: dict[str, Any]) -> bool:
         isinstance(summary, dict)
         and ("findings" in data or "issues" in data)
         and ("suppressed" in data or {"high", "medium", "low"} & set(summary))
+    )
+
+
+def _looks_like_sarif(data: dict[str, Any]) -> bool:
+    runs = data.get("runs")
+    if not isinstance(runs, list):
+        return False
+
+    version = str(data.get("version") or "")
+    if version == "2.1.0":
+        return True
+
+    for key, value in data.items():
+        if "sarif" in str(key).lower():
+            return True
+        if isinstance(value, str) and "sarif" in value.lower():
+            return True
+    return False
+
+
+def _normalize_sarif(path: Path, data: dict[str, Any]) -> ReportCard:
+    runs = _as_list(data.get("runs"))
+    results: list[dict[str, Any]] = []
+    driver_name = ""
+
+    for run in runs:
+        if not isinstance(run, dict):
+            continue
+        if not driver_name:
+            driver_name = _sarif_driver_name(run)
+        for result in _as_list(run.get("results")):
+            if isinstance(result, dict):
+                results.append(result)
+
+    counts = _sarif_level_counts(results)
+    risk_count = counts["errors"] + counts["warnings"] + counts["unknown"]
+    warnings = [_sarif_result_message(result) for result in results if _sarif_result_is_risky(result)]
+    warnings = [message for message in warnings if message]
+    status = "error" if counts["errors"] else ("warn" if risk_count else "pass")
+    title = driver_name or path.stem
+    tool = "agent-instruction-guard" if "agent-instruction-guard" in driver_name.lower() else "sarif"
+
+    return ReportCard(
+        source_path=path,
+        tool=tool,
+        title=title,
+        status=status,
+        summary=(
+            f"{len(results)} result(s); "
+            f"errors: {counts['errors']}; warnings: {counts['warnings']}; notes: {counts['notes']}"
+        ),
+        risk_count=risk_count,
+        warning_count=len(warnings),
+        warnings=warnings,
+        next_actions=_sarif_actions(warnings),
+        details={
+            "sarif_version": data.get("version"),
+            "runs": sum(1 for run in runs if isinstance(run, dict)),
+            "results": len(results),
+            "errors": counts["errors"],
+            "warnings": counts["warnings"],
+            "notes": counts["notes"],
+        },
     )
 
 
@@ -279,6 +344,62 @@ def _actions_from_findings(items: list[Any], fallback: str) -> list[str]:
         elif item:
             actions.append(str(item))
     return actions or [fallback]
+
+
+def _sarif_driver_name(run: dict[str, Any]) -> str:
+    tool = run.get("tool")
+    if not isinstance(tool, dict):
+        return ""
+    driver = tool.get("driver")
+    if not isinstance(driver, dict):
+        return ""
+    name = driver.get("name")
+    return str(name).strip() if name else ""
+
+
+def _sarif_level_counts(results: list[dict[str, Any]]) -> dict[str, int]:
+    counts = {"errors": 0, "warnings": 0, "notes": 0, "none": 0, "unknown": 0}
+    for result in results:
+        level = _sarif_level(result)
+        if level == "error":
+            counts["errors"] += 1
+        elif level == "warning":
+            counts["warnings"] += 1
+        elif level == "note":
+            counts["notes"] += 1
+        elif level in {"none", "pass", "passed"}:
+            counts["none"] += 1
+        else:
+            counts["unknown"] += 1
+    return counts
+
+
+def _sarif_result_is_risky(result: dict[str, Any]) -> bool:
+    return _sarif_level(result) not in {"note", "none", "pass", "passed"}
+
+
+def _sarif_level(result: dict[str, Any]) -> str:
+    level = result.get("level")
+    return str(level).strip().lower() if level is not None else ""
+
+
+def _sarif_result_message(result: dict[str, Any]) -> str:
+    message = result.get("message")
+    if isinstance(message, dict):
+        text = message.get("text")
+        if text:
+            return str(text)
+    elif message:
+        return str(message)
+
+    rule_id = result.get("ruleId")
+    return str(rule_id) if rule_id else ""
+
+
+def _sarif_actions(warnings: list[str]) -> list[str]:
+    if warnings:
+        return [f"Review SARIF finding: {message}" for message in warnings[:3]]
+    return ["Review SARIF findings."]
 
 
 def _status_from_counts(risk_count: int, total: int) -> str:

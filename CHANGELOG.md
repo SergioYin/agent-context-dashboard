@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.0
+
+- Added SARIF 2.1.0 ingestion for local code scanning reports.
+- SARIF reports from `agent-instruction-guard` are normalized under the existing `agent-instruction-guard` tool name when the SARIF driver identifies that tool.
+- SARIF summaries now include result, error, warning, and note counts, with risky findings surfaced as dashboard warnings and next actions.
+- Empty SARIF reports normalize as passing reports.
+
 ## 0.2.1
 
 - Added `--recursive` for discovering JSON reports under multi-repo report workspaces.

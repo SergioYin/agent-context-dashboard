@@ -7,7 +7,7 @@ It is built for maintainers and consultants operating multiple AI-agent context 
 ## What It Does
 
 - Reads JSON report files from a directory.
-- Normalizes known schemas from `agent-context-audit`, `agent-context-lint`, and `agent-instruction-guard`.
+- Normalizes known schemas from `agent-context-audit`, `agent-context-lint`, `agent-instruction-guard`, and SARIF 2.1.0.
 - Keeps unknown JSON visible as warning cards instead of dropping it.
 - Generates a README/Feishu-friendly Markdown dashboard with summary counts, report cards, risks, warnings, and next actions.
 - Emits machine-readable JSON for local automation.
@@ -39,6 +39,14 @@ Sample command:
 
 ```bash
 python -m agent_context_dashboard build examples/reports --output examples/DASHBOARD.md
+```
+
+SARIF files can live beside the other JSON reports. For example, include SARIF emitted by `agent-instruction-guard` and build the dashboard from that shared report directory:
+
+```bash
+mkdir -p /tmp/agent-reports
+agent-instruction-guard scan AGENTS.md --format sarif --output /tmp/agent-reports/guard.sarif.json
+python -m agent_context_dashboard /tmp/agent-reports --output /tmp/dashboard.md
 ```
 
 If `--output` is omitted, the dashboard is printed to stdout.
@@ -130,6 +138,14 @@ Detected when JSON includes the current guard JSON shape:
 - optional `suppressed`
 
 Legacy allow/deny decision reports with `allow`, `allowed`, `deny`, `denied`, or `blocked` are also accepted.
+
+### SARIF 2.1.0
+
+Detected when JSON has a `runs` list plus `version: "2.1.0"` or SARIF-identifying top-level metadata such as a SARIF `$schema` URL.
+
+SARIF reports are normalized as `sarif` by default. When `runs[].tool.driver.name` contains `agent-instruction-guard`, they are normalized as `agent-instruction-guard` so SARIF output from that companion asset aggregates with guard JSON reports.
+
+Dashboard summaries include total SARIF result count plus error, warning, and note counts. Results with `level` `error` or `warning`, or with a missing or unknown level, count as risky. Results with `level` `note`, `none`, or `pass` do not count as risky.
 
 ### Unknown JSON
 

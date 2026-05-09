@@ -65,6 +65,61 @@ class NormalizationTests(unittest.TestCase):
         self.assertEqual(card.details["suppressed"], 2)
         self.assertEqual(card.risk_count, 1)
 
+    def test_normalizes_agent_instruction_guard_sarif(self) -> None:
+        card = normalize_report(
+            Path("guard.sarif.json"),
+            {
+                "version": "2.1.0",
+                "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+                "runs": [
+                    {
+                        "tool": {"driver": {"name": "agent-instruction-guard"}},
+                        "results": [
+                            {"level": "error", "ruleId": "AIG001", "message": {"text": "Blocked unsafe instruction"}},
+                            {"level": "warning", "ruleId": "AIG002", "message": {"text": "Review ambiguous instruction"}},
+                            {"level": "note", "ruleId": "AIG003", "message": {"text": "Informational note"}},
+                            {"level": "none", "ruleId": "AIG004", "message": {"text": "Passed check"}},
+                            {"ruleId": "AIG005"},
+                        ],
+                    }
+                ],
+            },
+        )
+
+        self.assertEqual(card.tool, "agent-instruction-guard")
+        self.assertEqual(card.title, "agent-instruction-guard")
+        self.assertEqual(card.status, "error")
+        self.assertEqual(card.risk_count, 3)
+        self.assertEqual(card.warning_count, 3)
+        self.assertIn("Blocked unsafe instruction", card.warnings)
+        self.assertIn("Review ambiguous instruction", card.warnings)
+        self.assertIn("AIG005", card.warnings)
+        self.assertNotIn("Informational note", card.warnings)
+        self.assertEqual(card.details["sarif_version"], "2.1.0")
+        self.assertEqual(card.details["runs"], 1)
+        self.assertEqual(card.details["results"], 5)
+        self.assertEqual(card.details["errors"], 1)
+        self.assertEqual(card.details["warnings"], 1)
+        self.assertEqual(card.details["notes"], 1)
+        self.assertTrue(card.next_actions[0].startswith("Review SARIF finding:"))
+
+    def test_empty_sarif_passes(self) -> None:
+        card = normalize_report(
+            Path("scan.json"),
+            {
+                "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+                "runs": [{"tool": {"driver": {"name": "Static Scan"}}, "results": []}],
+            },
+        )
+
+        self.assertEqual(card.tool, "sarif")
+        self.assertEqual(card.title, "Static Scan")
+        self.assertEqual(card.status, "pass")
+        self.assertEqual(card.summary, "0 result(s); errors: 0; warnings: 0; notes: 0")
+        self.assertEqual(card.risk_count, 0)
+        self.assertEqual(card.warning_count, 0)
+        self.assertEqual(card.warnings, [])
+
 
 class LoadingAndCliTests(unittest.TestCase):
     def test_malformed_json_error(self) -> None:
@@ -179,6 +234,39 @@ class LoadingAndCliTests(unittest.TestCase):
             self.assertEqual(payload["summary"]["passing_reports"], 1)
             self.assertEqual(payload["reports"][0]["tool"], "agent-context-lint")
             self.assertEqual(payload["risks_and_warnings"], [])
+
+    def test_cli_json_includes_sarif_report(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            reports = Path(tmp)
+            (reports / "scan.json").write_text(
+                json.dumps(
+                    {
+                        "version": "2.1.0",
+                        "runs": [
+                            {
+                                "tool": {"driver": {"name": "Example SARIF Tool"}},
+                                "results": [{"level": "warning", "ruleId": "EX001"}],
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            stdout = StringIO()
+
+            with redirect_stdout(stdout):
+                exit_code = main([str(reports), "--format", "json"])
+
+            self.assertEqual(exit_code, 0)
+            payload = json.loads(stdout.getvalue())
+            report = payload["reports"][0]
+            self.assertEqual(payload["summary"]["reports_scanned"], 1)
+            self.assertEqual(payload["summary"]["reports_with_risk"], 1)
+            self.assertEqual(report["tool"], "sarif")
+            self.assertEqual(report["title"], "Example SARIF Tool")
+            self.assertEqual(report["details"]["sarif_version"], "2.1.0")
+            self.assertEqual(report["details"]["results"], 1)
+            self.assertEqual(report["warnings"], ["EX001"])
 
     def test_cli_writes_json_output_file(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
