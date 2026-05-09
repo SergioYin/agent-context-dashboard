@@ -5,7 +5,7 @@ import sys
 from pathlib import Path
 
 from . import __version__
-from .compare import ComparisonResult, compare_to_baseline, load_baseline
+from .compare import ComparisonResult, compare_to_baseline, load_baseline, load_compare_trends
 from .models import ReportCard
 from .render import render_html, render_json, render_markdown
 from .reports import DashboardError, load_reports
@@ -18,16 +18,22 @@ def build_dashboard(
     baseline: Path | None = None,
     recursive: bool = False,
     html_output: Path | None = None,
+    compare: list[Path] | None = None,
 ) -> str:
     cards = load_reports(input_dir, recursive=recursive)
     comparison = compare_to_baseline(cards, load_baseline(baseline)) if baseline else None
-    dashboard = render_json(cards, comparison=comparison) if output_format == "json" else render_markdown(cards, comparison=comparison)
+    compare_trends = load_compare_trends(compare)
+    dashboard = (
+        render_json(cards, comparison=comparison, compare_trends=compare_trends)
+        if output_format == "json"
+        else render_markdown(cards, comparison=comparison, compare_trends=compare_trends)
+    )
     if output:
         output.parent.mkdir(parents=True, exist_ok=True)
         output.write_text(dashboard, encoding="utf-8")
     if html_output:
         html_output.parent.mkdir(parents=True, exist_ok=True)
-        html_output.write_text(render_html(cards, comparison=comparison), encoding="utf-8")
+        html_output.write_text(render_html(cards, comparison=comparison, compare_trends=compare_trends), encoding="utf-8")
     return dashboard
 
 
@@ -43,17 +49,18 @@ def main(argv: list[str] | None = None) -> int:
     try:
         cards = load_reports(args.input_dir, recursive=args.recursive)
         comparison = compare_to_baseline(cards, load_baseline(args.baseline)) if args.baseline else None
+        compare_trends = load_compare_trends(args.compare)
         dashboard = (
-            render_json(cards, comparison=comparison)
+            render_json(cards, comparison=comparison, compare_trends=compare_trends)
             if args.format == "json"
-            else render_markdown(cards, comparison=comparison)
+            else render_markdown(cards, comparison=comparison, compare_trends=compare_trends)
         )
         if args.output:
             args.output.parent.mkdir(parents=True, exist_ok=True)
             args.output.write_text(dashboard, encoding="utf-8")
         if args.html_output:
             args.html_output.parent.mkdir(parents=True, exist_ok=True)
-            args.html_output.write_text(render_html(cards, comparison=comparison), encoding="utf-8")
+            args.html_output.write_text(render_html(cards, comparison=comparison, compare_trends=compare_trends), encoding="utf-8")
     except DashboardError as exc:
         print(f"agent-context-dashboard: error: {exc}", file=sys.stderr)
         return 2
@@ -78,6 +85,13 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--html-output", type=Path, help="Also write a static HTML dashboard summary to this file.")
     parser.add_argument("--format", choices=("markdown", "json"), default="markdown", help="Dashboard output format.")
     parser.add_argument("--baseline", type=Path, help="Compare against a prior JSON dashboard produced by --format json.")
+    parser.add_argument(
+        "--compare",
+        type=Path,
+        action="append",
+        default=[],
+        help="Include an agent-context-audit compare JSON file; repeat for multiple trend inputs.",
+    )
     parser.add_argument(
         "--recursive",
         action="store_true",

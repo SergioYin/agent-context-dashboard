@@ -468,6 +468,134 @@ class LoadingAndCliTests(unittest.TestCase):
             self.assertEqual(payload["comparison"]["summary"]["new_risk"], 1)
             self.assertEqual(payload["comparison"]["summary"]["increased_warnings"], 1)
 
+    def test_cli_json_includes_repeatable_compare_entries(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            reports = root / "reports"
+            reports.mkdir()
+            (reports / "audit.json").write_text(
+                json.dumps({"tool": {"name": "agent-context-audit"}, "overall_score": 90, "findings": []}),
+                encoding="utf-8",
+            )
+            compare_a = root / "compare-a.json"
+            compare_a.write_text(
+                json.dumps(
+                    {
+                        "baseline": {"overall_score": 82},
+                        "current": {"overall_score": 90},
+                        "changed_file_count": 3,
+                        "added_file_count": 1,
+                        "removed_file_count": 0,
+                        "files_improved": [
+                            {"path": "README.md", "baseline_score": 60, "current_score": 80, "delta": 20},
+                            {"path": "AGENTS.md", "baseline_score": 70, "current_score": 75, "delta": 5},
+                        ],
+                        "files_regressed": [],
+                        "rule_issue_count_deltas": {"baseline_total": 5, "current_total": 1, "delta": -4},
+                    }
+                ),
+                encoding="utf-8",
+            )
+            compare_b = root / "compare-b.json"
+            compare_b.write_text(
+                json.dumps(
+                    {
+                        "baseline_score": 90,
+                        "current_score": 88,
+                        "changed_file_count": 1,
+                        "files_regressed_count": 1,
+                        "rule_issue_delta": 2,
+                    }
+                ),
+                encoding="utf-8",
+            )
+            output = root / "dashboard.json"
+
+            exit_code = main(
+                [
+                    str(reports),
+                    "--compare",
+                    str(compare_a),
+                    "--compare",
+                    str(compare_b),
+                    "--format",
+                    "json",
+                    "--output",
+                    str(output),
+                ]
+            )
+
+            self.assertEqual(exit_code, 0)
+            payload = json.loads(output.read_text(encoding="utf-8"))
+            self.assertEqual(payload["compare_summary"]["total_entries"], 2)
+            self.assertEqual(payload["compare_summary"]["improved_entries"], 1)
+            self.assertEqual(payload["compare_summary"]["regressed_entries"], 1)
+            self.assertEqual(payload["compare_summary"]["rule_issue_delta"], -2)
+            self.assertEqual(payload["compare_entries"][0]["score_delta"], 8)
+            self.assertEqual(payload["compare_entries"][0]["source"], compare_a.as_posix())
+
+    def test_cli_markdown_and_html_include_compare_trends(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            reports = root / "reports"
+            reports.mkdir()
+            (reports / "lint.json").write_text(
+                json.dumps({"scanned_files": ["AGENTS.md"], "summary": {"average_score": 100}, "issues": []}),
+                encoding="utf-8",
+            )
+            compare_path = root / "compare.json"
+            compare_path.write_text(
+                json.dumps(
+                    {
+                        "baseline_score": 75,
+                        "current_score": 80,
+                        "changed_file_count": 2,
+                        "added_file_count": 1,
+                        "removed_file_count": 0,
+                        "files_improved_count": 2,
+                        "files_regressed_count": 0,
+                        "rule_issue_delta": -1,
+                    }
+                ),
+                encoding="utf-8",
+            )
+            markdown_output = root / "dashboard.md"
+            html_output = root / "dashboard.html"
+
+            exit_code = main(
+                [
+                    str(reports),
+                    "--compare",
+                    str(compare_path),
+                    "--output",
+                    str(markdown_output),
+                    "--html-output",
+                    str(html_output),
+                ]
+            )
+
+            self.assertEqual(exit_code, 0)
+            markdown = markdown_output.read_text(encoding="utf-8")
+            html = html_output.read_text(encoding="utf-8")
+            self.assertIn("## Score Trends", markdown)
+            self.assertIn("75 -> 80 (+5)", markdown)
+            self.assertIn("Score Trends", html)
+            self.assertIn(compare_path.as_posix(), html)
+
+    def test_cli_returns_error_for_malformed_compare_input(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            reports = root / "reports"
+            reports.mkdir()
+            (reports / "lint.json").write_text(
+                json.dumps({"scanned_files": ["AGENTS.md"], "summary": {"average_score": 100}, "issues": []}),
+                encoding="utf-8",
+            )
+            compare_path = root / "compare.json"
+            compare_path.write_text(json.dumps({"baseline_score": 90}), encoding="utf-8")
+
+            self.assertEqual(main([str(reports), "--compare", str(compare_path)]), 2)
+
     def test_strict_fails_for_baseline_regression_when_report_passes(self) -> None:
         cards = [
             normalize_report(

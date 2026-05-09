@@ -13,6 +13,7 @@ It is built for maintainers and consultants operating multiple AI-agent context 
 - Emits machine-readable JSON for local automation.
 - Writes a static, escaped HTML summary for local review or sharing.
 - Compares current output against a previous JSON dashboard to surface regressions.
+- Includes score trend deltas from one or more `agent-context-audit compare` JSON files.
 
 ## Install From Source
 
@@ -68,7 +69,7 @@ python -m agent_context_dashboard examples/reports --output examples/DASHBOARD.m
 python -m agent_context_dashboard examples/reports --format json --output examples/DASHBOARD.json --html-output examples/DASHBOARD.html
 ```
 
-The HTML dashboard includes the generated timestamp, overall status, summary counts, per-report rows, top warnings/errors, baseline comparison when `--baseline` is used, and SARIF report details when SARIF files are present.
+The HTML dashboard includes the generated timestamp, overall status, summary counts, per-report rows, top warnings/errors, baseline comparison when `--baseline` is used, score trends when `--compare` is used, and SARIF report details when SARIF files are present.
 
 By default, only top-level `*.json` files in the reports directory are read. Use `--recursive` for multi-repo report workspaces where companion tools write under per-repo subdirectories:
 
@@ -117,6 +118,21 @@ python -m agent_context_dashboard examples/reports --baseline /tmp/baseline-dash
 python -m agent_context_dashboard examples/reports --baseline /tmp/baseline-dashboard.json --format json --strict
 python -m agent_context_dashboard examples/reports --baseline /tmp/baseline-dashboard.json --strict --html-output /tmp/dashboard.html
 ```
+
+Include trend deltas from `agent-context-audit compare` JSON with repeatable `--compare` inputs:
+
+```bash
+agent-context-audit compare /tmp/audit-before.json /tmp/audit-after.json --write /tmp/audit-compare.json
+python -m agent_context_dashboard examples/reports --compare /tmp/audit-compare.json --output /tmp/dashboard.md
+python -m agent_context_dashboard examples/reports --compare /tmp/audit-compare.json --format json --output /tmp/dashboard.json
+python -m agent_context_dashboard examples/reports --compare /tmp/audit-compare.json --html-output /tmp/dashboard.html
+python -m agent_context_dashboard examples/reports --compare /tmp/repo-a-compare.json --compare /tmp/repo-b-compare.json --output /tmp/dashboard.md
+```
+
+Markdown and HTML output include a `Score Trends` section with baseline score, current score, score delta, changed/added/removed file counts, improved/regressed file counts, and rule issue delta. JSON output includes:
+
+- `compare_summary`: aggregate entry counts, total score delta, file counts, and rule issue delta.
+- `compare_entries`: one entry per compare input with `source`, `baseline_score`, `current_score`, `score_delta`, `changed_file_count`, `added_file_count`, `removed_file_count`, `files_improved_count`, `files_regressed_count`, and `rule_issue_delta`.
 
 ## Supported Report Schemas
 

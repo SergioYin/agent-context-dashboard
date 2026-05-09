@@ -17,6 +17,8 @@ def main() -> int:
         "agent_context_dashboard",
         "build",
         str(ROOT / "examples" / "reports"),
+        "--compare",
+        str(ROOT / "examples" / "compare.json"),
         "--output",
         str(OUTPUT),
     ]
@@ -32,6 +34,8 @@ def main() -> int:
         "agent-context-lint",
         "agent-instruction-guard",
         "Unknown schemas: 1",
+        "Score Trends",
+        "82 -> 90 (+8)",
         "Next Actions",
     ]
     missing = [text for text in expected if text not in dashboard]

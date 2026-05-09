@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.1
+
+- Added repeatable `--compare PATH` support for `agent-context-audit compare` JSON trend inputs.
+- JSON dashboards now include `compare_summary` and `compare_entries` with baseline/current scores, score delta, file change counts, improved/regressed file counts, rule issue delta, and source path.
+- Markdown and HTML dashboards now include a concise `Score Trends` section when compare JSON is provided.
+- Added malformed compare input validation and coverage for JSON, Markdown, and HTML outputs.
+
 ## 0.4.0
 
 - Added `--html-output PATH` for writing a static HTML dashboard summary alongside existing Markdown or JSON output.

@@ -1,0 +1,31 @@
+{
+  "baseline": {
+    "overall_score": 82
+  },
+  "current": {
+    "overall_score": 90
+  },
+  "changed_file_count": 3,
+  "added_file_count": 1,
+  "removed_file_count": 0,
+  "files_improved": [
+    {
+      "path": "README.md",
+      "baseline_score": 60,
+      "current_score": 80,
+      "delta": 20
+    },
+    {
+      "path": "AGENTS.md",
+      "baseline_score": 70,
+      "current_score": 75,
+      "delta": 5
+    }
+  ],
+  "files_regressed": [],
+  "rule_issue_count_deltas": {
+    "baseline_total": 5,
+    "current_total": 1,
+    "delta": -4
+  }
+}

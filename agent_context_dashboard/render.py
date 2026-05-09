@@ -5,7 +5,7 @@ from html import escape
 from datetime import datetime, timezone
 from typing import Any
 
-from .compare import ComparisonResult, comparison_payload
+from .compare import CompareTrend, ComparisonResult, compare_trends_payload, compare_trends_summary, comparison_payload
 from .models import ReportCard
 
 
@@ -13,6 +13,7 @@ def render_markdown(
     cards: list[ReportCard],
     generated_at: datetime | None = None,
     comparison: ComparisonResult | None = None,
+    compare_trends: list[CompareTrend] | None = None,
 ) -> str:
     stamp = generated_at or datetime.now(timezone.utc)
     summary = _summary_counts(cards)
@@ -54,6 +55,8 @@ def render_markdown(
 
     if comparison is not None:
         lines.extend(_render_comparison(comparison))
+    if compare_trends:
+        lines.extend(_render_compare_trends(compare_trends))
 
     lines.extend(["## Next Actions", ""])
     actions = _next_actions(cards)
@@ -70,8 +73,14 @@ def render_json(
     cards: list[ReportCard],
     generated_at: datetime | None = None,
     comparison: ComparisonResult | None = None,
+    compare_trends: list[CompareTrend] | None = None,
 ) -> str:
-    payload = dashboard_payload(cards, generated_at=generated_at, comparison=comparison)
+    payload = dashboard_payload(
+        cards,
+        generated_at=generated_at,
+        comparison=comparison,
+        compare_trends=compare_trends,
+    )
     return json.dumps(payload, indent=2, sort_keys=True) + "\n"
 
 
@@ -79,6 +88,7 @@ def render_html(
     cards: list[ReportCard],
     generated_at: datetime | None = None,
     comparison: ComparisonResult | None = None,
+    compare_trends: list[CompareTrend] | None = None,
 ) -> str:
     stamp = generated_at or datetime.now(timezone.utc)
     stamp_text = stamp.replace(microsecond=0).isoformat()
@@ -123,6 +133,8 @@ def render_html(
     parts.extend(_render_html_risks(risk_items))
     if comparison is not None:
         parts.extend(_render_html_comparison(comparison))
+    if compare_trends:
+        parts.extend(_render_html_compare_trends(compare_trends))
     if sarif_cards:
         parts.extend(_render_html_sarif(sarif_cards))
     parts.extend(_render_html_next_actions(cards))
@@ -134,6 +146,7 @@ def dashboard_payload(
     cards: list[ReportCard],
     generated_at: datetime | None = None,
     comparison: ComparisonResult | None = None,
+    compare_trends: list[CompareTrend] | None = None,
 ) -> dict[str, Any]:
     stamp = generated_at or datetime.now(timezone.utc)
     payload = {
@@ -146,6 +159,9 @@ def dashboard_payload(
     }
     if comparison is not None:
         payload["comparison"] = comparison_payload(comparison)
+    if compare_trends:
+        payload["compare_summary"] = compare_trends_summary(compare_trends)
+        payload["compare_entries"] = compare_trends_payload(compare_trends)
     return payload
 
 
@@ -323,6 +339,54 @@ def _render_html_comparison(comparison: ComparisonResult) -> list[str]:
     return lines
 
 
+def _render_html_compare_trends(trends: list[CompareTrend]) -> list[str]:
+    summary = compare_trends_summary(trends)
+    lines = [
+        '<section aria-labelledby="compare-trends-heading">',
+        '<h2 id="compare-trends-heading">Score Trends</h2>',
+        '<dl class="summary-grid">',
+    ]
+    for label, key in (
+        ("Compare entries", "total_entries"),
+        ("Improved entries", "improved_entries"),
+        ("Regressed entries", "regressed_entries"),
+        ("Total score delta", "total_score_delta"),
+        ("Files changed", "changed_file_count"),
+        ("Rule issue delta", "rule_issue_delta"),
+    ):
+        lines.append(f"<div><dt>{_h(label)}</dt><dd>{_h(summary[key])}</dd></div>")
+    lines.extend(["</dl>", '<div class="table-wrap">', "<table>", "<thead>"])
+    lines.append(
+        "<tr>"
+        '<th scope="col">Source</th><th scope="col">Baseline</th><th scope="col">Current</th>'
+        '<th scope="col">Delta</th><th scope="col">Changed</th><th scope="col">Added</th>'
+        '<th scope="col">Removed</th><th scope="col">Improved</th><th scope="col">Regressed</th>'
+        '<th scope="col">Rule Issues</th>'
+        "</tr>"
+    )
+    lines.extend(["</thead>", "<tbody>"])
+    for trend in trends:
+        status_class = "pass" if trend.score_delta >= 0 else "regression"
+        lines.extend(
+            [
+                "<tr>",
+                f"<td><code>{_h(trend.source)}</code></td>",
+                f"<td>{_h(_format_number(trend.baseline_score))}</td>",
+                f"<td>{_h(_format_number(trend.current_score))}</td>",
+                f'<td class="{_h(status_class)}">{_h(_signed_number(trend.score_delta))}</td>',
+                f"<td>{trend.changed_file_count}</td>",
+                f"<td>{trend.added_file_count}</td>",
+                f"<td>{trend.removed_file_count}</td>",
+                f"<td>{trend.files_improved_count}</td>",
+                f"<td>{trend.files_regressed_count}</td>",
+                f"<td>{_h(_signed_int(trend.rule_issue_delta))}</td>",
+                "</tr>",
+            ]
+        )
+    lines.extend(["</tbody>", "</table>", "</div>", "</section>"])
+    return lines
+
+
 def _render_html_sarif(cards: list[ReportCard]) -> list[str]:
     lines = [
         '<section aria-labelledby="sarif-heading">',
@@ -377,6 +441,34 @@ def _render_comparison(comparison: ComparisonResult) -> list[str]:
     return lines
 
 
+def _render_compare_trends(trends: list[CompareTrend]) -> list[str]:
+    summary = compare_trends_summary(trends)
+    lines = [
+        "## Score Trends",
+        "",
+        f"- Compare entries: {summary['total_entries']}",
+        f"- Improved entries: {summary['improved_entries']}",
+        f"- Regressed entries: {summary['regressed_entries']}",
+        f"- Total score delta: {_signed_number(float(summary['total_score_delta']))}",
+        f"- Files changed: {summary['changed_file_count']}",
+        f"- Files improved/regressed: {summary['files_improved_count']}/{summary['files_regressed_count']}",
+        f"- Rule issue delta: {_signed_int(int(summary['rule_issue_delta']))}",
+        "",
+    ]
+    for trend in trends:
+        lines.append(
+            "- "
+            f"`{trend.source}`: "
+            f"{_format_number(trend.baseline_score)} -> {_format_number(trend.current_score)} "
+            f"({_signed_number(trend.score_delta)}); "
+            f"files changed/added/removed: {trend.changed_file_count}/{trend.added_file_count}/{trend.removed_file_count}; "
+            f"files improved/regressed: {trend.files_improved_count}/{trend.files_regressed_count}; "
+            f"rule issue delta: {_signed_int(trend.rule_issue_delta)}"
+        )
+    lines.append("")
+    return lines
+
+
 def _next_actions(cards: list[ReportCard]) -> list[str]:
     if not cards:
         return []
@@ -423,6 +515,23 @@ def _h(value: Any) -> str:
 def _status_class(status: str) -> str:
     normalized = "".join(ch if ch.isalnum() else "-" for ch in status.lower()).strip("-")
     return normalized or "unknown"
+
+
+def _format_number(value: float) -> str:
+    return str(int(value)) if value.is_integer() else f"{value:.2f}".rstrip("0").rstrip(".")
+
+
+def _signed_number(value: float) -> str:
+    formatted = _format_number(abs(value))
+    if value > 0:
+        return f"+{formatted}"
+    if value < 0:
+        return f"-{formatted}"
+    return formatted
+
+
+def _signed_int(value: int) -> str:
+    return f"+{value}" if value > 0 else str(value)
 
 
 def _html_styles() -> str:
