@@ -1,6 +1,6 @@
 # agent-context-dashboard
 
-`agent-context-dashboard` is a zero-dependency Python CLI that aggregates local JSON outputs from agent context toolchains into one Markdown asset health dashboard.
+`agent-context-dashboard` is a zero-dependency Python CLI that aggregates local JSON outputs from agent context toolchains into one Markdown or JSON asset health dashboard.
 
 It is built for maintainers and consultants operating multiple AI-agent context or instruction repositories who need a quick portfolio summary without SaaS, hosted services, or external packages.
 
@@ -10,6 +10,7 @@ It is built for maintainers and consultants operating multiple AI-agent context 
 - Normalizes known schemas from `agent-context-audit`, `agent-context-lint`, and `agent-instruction-guard`.
 - Keeps unknown JSON visible as warning cards instead of dropping it.
 - Generates a README/Feishu-friendly Markdown dashboard with summary counts, report cards, risks, warnings, and next actions.
+- Emits machine-readable JSON for local automation.
 
 ## Install From Source
 
@@ -40,6 +41,22 @@ python -m agent_context_dashboard build examples/reports --output examples/DASHB
 ```
 
 If `--output` is omitted, the dashboard is printed to stdout.
+
+Markdown is the default output format. Use JSON for scripts:
+
+```bash
+python -m agent_context_dashboard examples/reports --format json
+python -m agent_context_dashboard examples/reports --format json --output examples/DASHBOARD.json
+```
+
+Use `--strict` when automation should fail on risky, blocked, error, or unknown normalized reports, or on any warnings:
+
+```bash
+python -m agent_context_dashboard examples/reports --strict
+python -m agent_context_dashboard examples/reports --format json --strict --output /tmp/dashboard.json
+```
+
+Without `--strict`, the CLI exits 0 after successful IO and JSON parsing even when the dashboard contains risks or unknown schemas.
 
 ## Supported Report Schemas
 
@@ -92,6 +109,7 @@ Unknown schemas are included as `unknown` cards with file metadata and a warning
 
 ```bash
 python -m unittest
+python -m unittest discover -s tests -v
 python scripts/selfcheck.py
 python -m compileall agent_context_dashboard tests scripts
 ```

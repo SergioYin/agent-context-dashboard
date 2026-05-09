@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 import tempfile
 import unittest
+from contextlib import redirect_stdout
+from io import StringIO
 from pathlib import Path
 
 from agent_context_dashboard.cli import main
@@ -108,6 +110,72 @@ class LoadingAndCliTests(unittest.TestCase):
             dashboard = output.read_text(encoding="utf-8")
             self.assertIn("agent-context-lint", dashboard)
             self.assertIn("Reports scanned: 1", dashboard)
+
+    def test_cli_prints_json_to_stdout(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            reports = Path(tmp)
+            (reports / "lint.json").write_text(
+                json.dumps({"scanned_files": ["AGENTS.md"], "summary": {"average_score": 100}, "issues": []}),
+                encoding="utf-8",
+            )
+            stdout = StringIO()
+
+            with redirect_stdout(stdout):
+                exit_code = main([str(reports), "--format", "json"])
+
+            self.assertEqual(exit_code, 0)
+            payload = json.loads(stdout.getvalue())
+            self.assertIn("generated_at", payload)
+            self.assertEqual(payload["summary"]["reports_scanned"], 1)
+            self.assertEqual(payload["summary"]["passing_reports"], 1)
+            self.assertEqual(payload["reports"][0]["tool"], "agent-context-lint")
+            self.assertEqual(payload["risks_and_warnings"], [])
+
+    def test_cli_writes_json_output_file(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            reports = root / "reports"
+            reports.mkdir()
+            (reports / "unknown.json").write_text(json.dumps({"tool": "new-tool"}), encoding="utf-8")
+            output = root / "dashboard.json"
+
+            exit_code = main([str(reports), "--format", "json", "--output", str(output)])
+
+            self.assertEqual(exit_code, 0)
+            payload = json.loads(output.read_text(encoding="utf-8"))
+            self.assertEqual(payload["summary"]["unknown_schemas"], 1)
+            self.assertEqual(payload["reports"][0]["status"], "unknown")
+            self.assertEqual(payload["risks_and_warnings"][0]["kind"], "unknown_schema")
+
+    def test_strict_returns_nonzero_for_warnings(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            reports = Path(tmp)
+            (reports / "lint.json").write_text(
+                json.dumps(
+                    {
+                        "scanned_files": ["AGENTS.md"],
+                        "summary": {"average_score": 85},
+                        "issues": [{"severity": "warn", "message": "Owner missing"}],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            self.assertEqual(main([str(reports), "--strict", "--output", str(reports / "dashboard.md")]), 1)
+
+    def test_non_strict_returns_zero_for_unknown_schema(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            reports = Path(tmp)
+            (reports / "unknown.json").write_text(json.dumps({"tool": "new-tool"}), encoding="utf-8")
+
+            self.assertEqual(main([str(reports), "--output", str(reports / "dashboard.md")]), 0)
+
+    def test_strict_returns_nonzero_for_unknown_schema(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            reports = Path(tmp)
+            (reports / "unknown.json").write_text(json.dumps({"tool": "new-tool"}), encoding="utf-8")
+
+            self.assertEqual(main([str(reports), "--strict", "--output", str(reports / "dashboard.md")]), 1)
 
 
 if __name__ == "__main__":
