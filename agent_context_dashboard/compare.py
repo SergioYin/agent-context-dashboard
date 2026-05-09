@@ -164,7 +164,7 @@ def _dashboard_reports(payload: Any, path: Path) -> dict[tuple[str, str], dict[s
 
 
 def _card_key(card: ReportCard) -> tuple[str, str]:
-    return (card.source_path.name, card.tool)
+    return (card.source_path.as_posix(), card.tool)
 
 
 def _is_risky_payload(report: dict[str, Any]) -> bool:

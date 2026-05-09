@@ -50,6 +50,19 @@ python -m agent_context_dashboard examples/reports --format json
 python -m agent_context_dashboard examples/reports --format json --output examples/DASHBOARD.json
 ```
 
+By default, only top-level `*.json` files in the reports directory are read. Use `--recursive` for multi-repo report workspaces where companion tools write under per-repo subdirectories:
+
+```bash
+mkdir -p /tmp/reports-workspace/repo-a /tmp/reports-workspace/repo-b
+cp examples/reports/lint.json /tmp/reports-workspace/repo-a/lint.json
+cp examples/reports/lint.json /tmp/reports-workspace/repo-b/lint.json
+
+python -m agent_context_dashboard /tmp/reports-workspace --recursive --output /tmp/dashboard.md
+python -m agent_context_dashboard /tmp/reports-workspace --recursive --format json --output /tmp/dashboard.json
+```
+
+Recursive mode records stable source paths relative to the input directory, such as `repo-a/lint.json` and `repo-b/lint.json`, so repeated filenames remain distinct in Markdown, JSON, and baseline comparisons. Common cache, build, and vendor directories such as `.git`, `__pycache__`, `.pytest_cache`, `.mypy_cache`, `.ruff_cache`, `node_modules`, `venv`, `.venv`, `dist`, and `build` are skipped.
+
 Use `--strict` when automation should fail on risky, blocked, error, or unknown normalized reports, or on any warnings:
 
 ```bash

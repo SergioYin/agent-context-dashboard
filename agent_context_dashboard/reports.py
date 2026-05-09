@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from typing import Any
 
@@ -19,7 +20,21 @@ class ReportParseError(DashboardError):
     """Raised when a JSON report cannot be parsed."""
 
 
-def load_reports(input_dir: Path | str) -> list[ReportCard]:
+EXCLUDED_RECURSIVE_DIRS = {
+    ".git",
+    "__pycache__",
+    ".pytest_cache",
+    ".mypy_cache",
+    ".ruff_cache",
+    "node_modules",
+    "venv",
+    ".venv",
+    "dist",
+    "build",
+}
+
+
+def load_reports(input_dir: Path | str, recursive: bool = False) -> list[ReportCard]:
     directory = Path(input_dir)
     if not directory.exists():
         raise ReportDirectoryError(f"Report directory does not exist: {directory}")
@@ -27,7 +42,7 @@ def load_reports(input_dir: Path | str) -> list[ReportCard]:
         raise ReportDirectoryError(f"Report path is not a directory: {directory}")
 
     cards: list[ReportCard] = []
-    for path in sorted(directory.glob("*.json")):
+    for path in _discover_json_reports(directory, recursive=recursive):
         try:
             with path.open("r", encoding="utf-8") as handle:
                 data = json.load(handle)
@@ -38,8 +53,22 @@ def load_reports(input_dir: Path | str) -> list[ReportCard]:
         except OSError as exc:
             raise ReportParseError(f"Could not read {path}: {exc}") from exc
 
-        cards.append(normalize_report(path, data))
+        source_path = path.relative_to(directory) if recursive else Path(path.name)
+        cards.append(normalize_report(source_path, data))
     return cards
+
+
+def _discover_json_reports(directory: Path, recursive: bool) -> list[Path]:
+    if not recursive:
+        return sorted(directory.glob("*.json"))
+
+    paths: list[Path] = []
+    for root, dirnames, filenames in os.walk(directory):
+        dirnames[:] = sorted(name for name in dirnames if name not in EXCLUDED_RECURSIVE_DIRS)
+        for filename in sorted(filenames):
+            if filename.endswith(".json"):
+                paths.append(Path(root) / filename)
+    return sorted(paths, key=lambda path: path.relative_to(directory).as_posix())
 
 
 def normalize_report(path: Path | str, data: Any) -> ReportCard:

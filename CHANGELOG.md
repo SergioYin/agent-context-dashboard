@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.1
+
+- Added `--recursive` for discovering JSON reports under multi-repo report workspaces.
+- Recursive mode stores stable source paths relative to the input directory, preventing repeated filenames from colliding in JSON output and baseline comparisons.
+- Recursive discovery skips common cache, build, and vendor directories.
+
 ## 0.2.0
 
 - Added `--baseline PATH` for comparing current normalized reports against a prior JSON dashboard.

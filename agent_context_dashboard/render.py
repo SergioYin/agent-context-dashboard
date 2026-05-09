@@ -98,7 +98,7 @@ def _render_card(card: ReportCard) -> list[str]:
         f"### {card.title}",
         "",
         f"- Tool: {card.tool}",
-        f"- Source: `{card.source_path.name}`",
+        f"- Source: `{_source_id(card)}`",
         f"- Status: {card.status}",
         f"- Summary: {card.summary}",
     ]
@@ -121,7 +121,7 @@ def _summary_counts(cards: list[ReportCard]) -> dict[str, int]:
 
 def _report_payload(card: ReportCard) -> dict[str, Any]:
     return {
-        "source": card.source_path.name,
+        "source": _source_id(card),
         "tool": card.tool,
         "title": card.title,
         "status": card.status,
@@ -138,9 +138,9 @@ def _risk_lines(cards: list[ReportCard]) -> list[str]:
     lines: list[str] = []
     for card in cards:
         if card.tool == "unknown":
-            lines.append(f"- `{card.source_path.name}`: unknown schema.")
+            lines.append(f"- `{_source_id(card)}`: unknown schema.")
         for warning in card.warnings[:5]:
-            lines.append(f"- `{card.source_path.name}`: {warning}")
+            lines.append(f"- `{_source_id(card)}`: {warning}")
     return lines
 
 
@@ -150,7 +150,7 @@ def _risk_payload(cards: list[ReportCard]) -> list[dict[str, str]]:
         if card.tool == "unknown":
             items.append(
                 {
-                    "source": card.source_path.name,
+                    "source": _source_id(card),
                     "kind": "unknown_schema",
                     "message": "unknown schema",
                 }
@@ -158,7 +158,7 @@ def _risk_payload(cards: list[ReportCard]) -> list[dict[str, str]]:
         for warning in card.warnings[:5]:
             items.append(
                 {
-                    "source": card.source_path.name,
+                    "source": _source_id(card),
                     "kind": "warning",
                     "message": warning,
                 }
@@ -195,7 +195,7 @@ def _next_actions(cards: list[ReportCard]) -> list[str]:
     seen: set[str] = set()
     for card in cards:
         if card.tool == "unknown":
-            candidate = f"Map `{card.source_path.name}` to a supported schema or review it manually."
+            candidate = f"Map `{_source_id(card)}` to a supported schema or review it manually."
             if candidate not in seen:
                 actions.append(candidate)
                 seen.add(candidate)
@@ -208,6 +208,10 @@ def _next_actions(cards: list[ReportCard]) -> list[str]:
     if not actions:
         actions.append("Keep current report generation in CI or local maintenance scripts.")
     return actions[:8]
+
+
+def _source_id(card: ReportCard) -> str:
+    return card.source_path.as_posix()
 
 
 def _json_safe(value: Any) -> Any:

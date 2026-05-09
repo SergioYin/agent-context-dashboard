@@ -16,8 +16,9 @@ def build_dashboard(
     output: Path | None,
     output_format: str = "markdown",
     baseline: Path | None = None,
+    recursive: bool = False,
 ) -> str:
-    cards = load_reports(input_dir)
+    cards = load_reports(input_dir, recursive=recursive)
     comparison = compare_to_baseline(cards, load_baseline(baseline)) if baseline else None
     dashboard = render_json(cards, comparison=comparison) if output_format == "json" else render_markdown(cards, comparison=comparison)
     if output:
@@ -36,7 +37,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     try:
-        cards = load_reports(args.input_dir)
+        cards = load_reports(args.input_dir, recursive=args.recursive)
         comparison = compare_to_baseline(cards, load_baseline(args.baseline)) if args.baseline else None
         dashboard = (
             render_json(cards, comparison=comparison)
@@ -69,6 +70,11 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("-o", "--output", type=Path, help="Write dashboard output to this file.")
     parser.add_argument("--format", choices=("markdown", "json"), default="markdown", help="Dashboard output format.")
     parser.add_argument("--baseline", type=Path, help="Compare against a prior JSON dashboard produced by --format json.")
+    parser.add_argument(
+        "--recursive",
+        action="store_true",
+        help="Recursively discover JSON reports under input_dir, excluding common cache/build/vendor directories.",
+    )
     parser.add_argument(
         "--strict",
         action="store_true",

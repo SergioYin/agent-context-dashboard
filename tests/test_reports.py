@@ -8,7 +8,8 @@ from io import StringIO
 from pathlib import Path
 
 from agent_context_dashboard.cli import _has_strict_failures, main
-from agent_context_dashboard.compare import ComparisonItem, ComparisonResult
+from agent_context_dashboard.compare import ComparisonItem, ComparisonResult, compare_to_baseline, load_baseline
+from agent_context_dashboard.render import render_json
 from agent_context_dashboard.reports import ReportParseError, load_reports, normalize_report
 
 
@@ -79,6 +80,53 @@ class LoadingAndCliTests(unittest.TestCase):
             cards = load_reports(Path(tmp))
 
         self.assertEqual(cards, [])
+
+    def test_load_reports_defaults_to_top_level_json_only(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "lint.json").write_text(
+                json.dumps({"scanned_files": ["AGENTS.md"], "summary": {"average_score": 100}, "issues": []}),
+                encoding="utf-8",
+            )
+            nested = root / "repo-a"
+            nested.mkdir()
+            (nested / "lint.json").write_text(
+                json.dumps({"scanned_files": ["README.md"], "summary": {"average_score": 100}, "issues": []}),
+                encoding="utf-8",
+            )
+
+            cards = load_reports(root)
+
+        self.assertEqual([card.source_path.as_posix() for card in cards], ["lint.json"])
+
+    def test_recursive_reports_keep_distinct_relative_sources_for_baseline(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            for repo_name, scanned_file in (("repo-a", "AGENTS.md"), ("repo-b", "README.md")):
+                repo = root / repo_name
+                repo.mkdir()
+                (repo / "lint.json").write_text(
+                    json.dumps(
+                        {
+                            "scanned_files": [scanned_file],
+                            "summary": {"average_score": 100},
+                            "issues": [],
+                        }
+                    ),
+                    encoding="utf-8",
+                )
+            cache = root / "node_modules"
+            cache.mkdir()
+            (cache / "ignored.json").write_text(json.dumps({"tool": "new-tool"}), encoding="utf-8")
+
+            cards = load_reports(root, recursive=True)
+            baseline_path = root / "baseline.json"
+            baseline_path.write_text(render_json(cards), encoding="utf-8")
+            comparison = compare_to_baseline(cards, load_baseline(baseline_path))
+
+        self.assertEqual([card.source_path.as_posix() for card in cards], ["repo-a/lint.json", "repo-b/lint.json"])
+        self.assertEqual(comparison.summary["total_items"], 0)
+        self.assertFalse(comparison.has_regressions)
 
     def test_cli_writes_output_file_for_empty_directory(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
