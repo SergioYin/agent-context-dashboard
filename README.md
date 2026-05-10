@@ -12,6 +12,7 @@ It is built for maintainers and consultants operating multiple AI-agent context 
 - Generates a README/Feishu-friendly Markdown dashboard with summary counts, report cards, risks, warnings, and next actions.
 - Emits machine-readable JSON for local automation.
 - Writes a static, escaped HTML summary for local review or sharing.
+- Exports a standalone static HTML asset hub landing page with stable sections for sharing multiple report assets.
 - Compares current output against a previous JSON dashboard to surface regressions.
 - Includes score trend deltas from one or more `agent-context-audit compare` JSON files.
 
@@ -28,6 +29,7 @@ For local development without installing:
 ```bash
 python -m agent_context_dashboard examples/reports --output examples/DASHBOARD.md
 python -m agent_context_dashboard examples/reports --output examples/DASHBOARD.md --html-output examples/DASHBOARD.html
+python -m agent_context_dashboard examples/reports --compare examples/compare.json --hub examples/ASSET_HUB.html
 ```
 
 ## Usage
@@ -43,6 +45,7 @@ Sample command:
 ```bash
 python -m agent_context_dashboard build examples/reports --output examples/DASHBOARD.md
 python -m agent_context_dashboard build examples/reports --output examples/DASHBOARD.md --html-output examples/DASHBOARD.html
+python -m agent_context_dashboard build examples/reports --compare examples/compare.json --hub examples/ASSET_HUB.html
 ```
 
 SARIF files can live beside the other JSON reports. For example, include SARIF emitted by `agent-instruction-guard` and build the dashboard from that shared report directory:
@@ -70,6 +73,17 @@ python -m agent_context_dashboard examples/reports --format json --output exampl
 ```
 
 The HTML dashboard includes the generated timestamp, overall status, summary counts, per-report rows, top warnings/errors, baseline comparison when `--baseline` is used, score trends when `--compare` is used, and SARIF report details when SARIF files are present.
+
+Use `--hub` to write a standalone static HTML asset hub landing page. This is intended for GitHub issue comments, release artifacts, local handoff folders, or README-linked snapshots where maintainers want one shareable page summarizing many agent-tool report files:
+
+```bash
+python -m agent_context_dashboard examples/reports --compare examples/compare.json --hub examples/ASSET_HUB.html
+python -m agent_context_dashboard examples/reports --format json --output examples/DASHBOARD.json --hub examples/ASSET_HUB.html
+```
+
+The hub page includes stable anchors for `Overview`, `Asset Matrix`, `Trend Signals`, `Verification Commands`, and `Source Reports`. When hub export is requested with JSON output, the JSON dashboard includes a `hub` object with the hub path, generated timestamp, and input count. The generated page is a local static artifact; it does not require GitHub Actions, SaaS callbacks, telemetry, tokens, or repository workflow permissions.
+
+See `examples/ASSET_HUB.md` for a synthetic hub export command and expected section list.
 
 By default, only top-level `*.json` files in the reports directory are read. Use `--recursive` for multi-repo report workspaces where companion tools write under per-repo subdirectories:
 
@@ -196,6 +210,7 @@ python -m unittest
 python -m unittest discover -s tests -v
 python scripts/selfcheck.py
 python -m compileall agent_context_dashboard tests scripts
+python -m agent_context_dashboard examples/reports --compare examples/compare.json --hub /tmp/agent-context-dashboard-hub.html --output /tmp/agent-context-dashboard.md
 ```
 
 The selfcheck reads `examples/reports`, writes `/tmp/agent-context-dashboard-selfcheck.md`, and asserts key dashboard strings.

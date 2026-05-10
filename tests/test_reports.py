@@ -9,7 +9,7 @@ from pathlib import Path
 
 from agent_context_dashboard.cli import _has_strict_failures, main
 from agent_context_dashboard.compare import ComparisonItem, ComparisonResult, compare_to_baseline, load_baseline
-from agent_context_dashboard.render import render_html, render_json
+from agent_context_dashboard.render import render_html, render_hub_html, render_json
 from agent_context_dashboard.reports import ReportParseError, load_reports, normalize_report
 
 
@@ -255,6 +255,112 @@ class LoadingAndCliTests(unittest.TestCase):
             self.assertIn("Agent Context Asset Health Dashboard", html)
             self.assertIn("agent-context-lint", html)
 
+    def test_cli_writes_asset_hub_with_stable_sections(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            reports = root / "reports"
+            reports.mkdir()
+            (reports / "lint.json").write_text(
+                json.dumps(
+                    {
+                        "scanned_files": ["AGENTS.md"],
+                        "summary": {"average_score": 85},
+                        "issues": [{"severity": "warn", "message": "Owner missing"}],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            (reports / "audit.json").write_text(
+                json.dumps({"tool": {"name": "agent-context-audit"}, "overall_score": 94, "findings": []}),
+                encoding="utf-8",
+            )
+            compare_path = root / "compare.json"
+            compare_path.write_text(
+                json.dumps(
+                    {
+                        "baseline_score": 80,
+                        "current_score": 85,
+                        "changed_file_count": 2,
+                        "files_improved_count": 1,
+                        "files_regressed_count": 0,
+                        "rule_issue_delta": -1,
+                    }
+                ),
+                encoding="utf-8",
+            )
+            hub = root / "asset-hub.html"
+            output = root / "dashboard.md"
+
+            exit_code = main([str(reports), "--compare", str(compare_path), "--hub", str(hub), "--output", str(output)])
+
+            self.assertEqual(exit_code, 0)
+            html = hub.read_text(encoding="utf-8")
+            self.assertIn("<!doctype html>", html)
+            self.assertIn("Agent Context Asset Hub", html)
+            for section_id in ("overview", "asset-matrix", "trend-signals", "verification-commands", "source-reports"):
+                self.assertIn(f'id="{section_id}"', html)
+            self.assertIn("Reports scanned", html)
+            self.assertIn("Warnings", html)
+            self.assertIn("agent-context-lint", html)
+            self.assertIn("Owner missing", html)
+            self.assertIn(compare_path.as_posix(), html)
+            self.assertIn("python -m unittest", html)
+
+    def test_cli_json_includes_hub_metadata_when_hub_requested(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            reports = root / "reports"
+            reports.mkdir()
+            (reports / "lint.json").write_text(
+                json.dumps({"scanned_files": ["AGENTS.md"], "summary": {"average_score": 100}, "issues": []}),
+                encoding="utf-8",
+            )
+            output = root / "dashboard.json"
+            hub = root / "asset-hub.html"
+
+            exit_code = main([str(reports), "--format", "json", "--output", str(output), "--hub", str(hub)])
+
+            self.assertEqual(exit_code, 0)
+            payload = json.loads(output.read_text(encoding="utf-8"))
+            self.assertEqual(payload["hub"]["path"], hub.as_posix())
+            self.assertEqual(payload["hub"]["input_count"], 1)
+            self.assertEqual(payload["hub"]["generated_at"], payload["generated_at"])
+            self.assertTrue(hub.exists())
+
+    def test_hub_export_preserves_markdown_and_html_outputs(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            reports = root / "reports"
+            reports.mkdir()
+            (reports / "lint.json").write_text(
+                json.dumps({"scanned_files": ["AGENTS.md"], "summary": {"average_score": 100}, "issues": []}),
+                encoding="utf-8",
+            )
+            markdown_output = root / "dashboard.md"
+            html_output = root / "dashboard.html"
+            hub = root / "asset-hub.html"
+
+            exit_code = main(
+                [
+                    str(reports),
+                    "--output",
+                    str(markdown_output),
+                    "--html-output",
+                    str(html_output),
+                    "--hub",
+                    str(hub),
+                ]
+            )
+
+            self.assertEqual(exit_code, 0)
+            markdown = markdown_output.read_text(encoding="utf-8")
+            html = html_output.read_text(encoding="utf-8")
+            self.assertIn("# Agent Context Asset Health Dashboard", markdown)
+            self.assertIn("Reports scanned: 1", markdown)
+            self.assertIn("Agent Context Asset Health Dashboard", html)
+            self.assertIn("agent-context-lint", html)
+            self.assertIn("Agent Context Asset Hub", hub.read_text(encoding="utf-8"))
+
     def test_cli_prints_json_to_stdout(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             reports = Path(tmp)
@@ -307,6 +413,25 @@ class LoadingAndCliTests(unittest.TestCase):
             self.assertEqual(report["details"]["sarif_version"], "2.1.0")
             self.assertEqual(report["details"]["results"], 1)
             self.assertEqual(report["warnings"], ["EX001"])
+
+    def test_hub_renderer_escapes_report_content(self) -> None:
+        card = normalize_report(
+            Path("unsafe.json"),
+            {
+                "tool": {"name": "agent-context-audit"},
+                "repository": "<script>alert('x')</script>",
+                "summary": "A & B < C",
+                "findings": [{"severity": "warning", "message": "<b>Check owner</b> & docs"}],
+            },
+        )
+
+        html = render_hub_html([card], input_dir="/tmp/reports")
+
+        self.assertIn("&lt;script&gt;alert(&#x27;x&#x27;)&lt;/script&gt;", html)
+        self.assertIn("A &amp; B &lt; C", html)
+        self.assertIn("&lt;b&gt;Check owner&lt;/b&gt; &amp; docs", html)
+        self.assertNotIn("<script>alert", html)
+        self.assertNotIn("<b>Check owner</b>", html)
 
     def test_html_includes_baseline_and_sarif_sections(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

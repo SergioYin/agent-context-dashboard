@@ -74,12 +74,14 @@ def render_json(
     generated_at: datetime | None = None,
     comparison: ComparisonResult | None = None,
     compare_trends: list[CompareTrend] | None = None,
+    hub_path: str | None = None,
 ) -> str:
     payload = dashboard_payload(
         cards,
         generated_at=generated_at,
         comparison=comparison,
         compare_trends=compare_trends,
+        hub_path=hub_path,
     )
     return json.dumps(payload, indent=2, sort_keys=True) + "\n"
 
@@ -142,21 +144,155 @@ def render_html(
     return "\n".join(parts)
 
 
+def render_hub_html(
+    cards: list[ReportCard],
+    generated_at: datetime | None = None,
+    comparison: ComparisonResult | None = None,
+    compare_trends: list[CompareTrend] | None = None,
+    input_dir: str | None = None,
+) -> str:
+    stamp = generated_at or datetime.now(timezone.utc)
+    stamp_text = stamp.replace(microsecond=0).isoformat()
+    summary = _summary_counts(cards)
+    overall_status = _overall_status(cards, comparison)
+    risk_items = _risk_payload(cards)
+    trend_summary = compare_trends_summary(compare_trends or [])
+    source_label = input_dir or "."
+
+    parts = [
+        "<!doctype html>",
+        '<html lang="en">',
+        "<head>",
+        '<meta charset="utf-8">',
+        '<meta name="viewport" content="width=device-width, initial-scale=1">',
+        "<title>Agent Context Asset Hub</title>",
+        "<style>",
+        _html_styles(),
+        "</style>",
+        "</head>",
+        "<body>",
+        "<main>",
+        "<header>",
+        "<h1>Agent Context Asset Hub</h1>",
+        f"<p>Generated: <time datetime=\"{_h(stamp_text)}\">{_h(stamp_text)}</time></p>",
+        f'<p class="status status-{_h(overall_status)}">Overall status: {_h(overall_status.replace("_", " "))}</p>',
+        "</header>",
+        '<nav aria-label="Hub sections">',
+        '<a href="#overview">Overview</a> ',
+        '<a href="#asset-matrix">Asset Matrix</a> ',
+        '<a href="#trend-signals">Trend Signals</a> ',
+        '<a href="#verification-commands">Verification Commands</a> ',
+        '<a href="#source-reports">Source Reports</a>',
+        "</nav>",
+        '<section id="overview" aria-labelledby="overview-heading">',
+        '<h2 id="overview-heading">Overview</h2>',
+        f"<p>Source report directory: <code>{_h(source_label)}</code></p>",
+        '<dl class="summary-grid">',
+    ]
+    for label, key in (
+        ("Reports scanned", "reports_scanned"),
+        ("Passing reports", "passing_reports"),
+        ("Reports with risk", "reports_with_risk"),
+        ("Warnings", "warnings"),
+        ("Unknown schemas", "unknown_schemas"),
+    ):
+        parts.append(f"<div><dt>{_h(label)}</dt><dd>{summary[key]}</dd></div>")
+    parts.extend(["</dl>"])
+    if risk_items:
+        parts.append("<ul>")
+        for item in risk_items[:8]:
+            parts.append(
+                f"<li>{_h(item['kind'].replace('_', ' '))}: "
+                f"<code>{_h(item['source'])}</code> - {_h(item['message'])}</li>"
+            )
+        parts.append("</ul>")
+    else:
+        parts.append("<p>No risks or warnings were detected.</p>")
+    parts.append("</section>")
+
+    parts.extend(_render_hub_asset_matrix(cards))
+    parts.extend(
+        [
+            '<section id="trend-signals" aria-labelledby="trend-signals-heading">',
+            '<h2 id="trend-signals-heading">Trend Signals</h2>',
+            '<dl class="summary-grid">',
+        ]
+    )
+    for label, key in (
+        ("Compare entries", "total_entries"),
+        ("Improved entries", "improved_entries"),
+        ("Regressed entries", "regressed_entries"),
+        ("Total score delta", "total_score_delta"),
+        ("Files changed", "changed_file_count"),
+        ("Rule issue delta", "rule_issue_delta"),
+    ):
+        parts.append(f"<div><dt>{_h(label)}</dt><dd>{_h(trend_summary[key])}</dd></div>")
+    parts.extend(["</dl>"])
+    if compare_trends:
+        parts.extend(_render_hub_trend_table(compare_trends))
+    else:
+        parts.append("<p>No compare trend inputs were provided.</p>")
+    if comparison is not None:
+        parts.append("<h3>Baseline Comparison</h3>")
+        parts.extend(_render_html_comparison(comparison)[2:-1])
+    parts.append("</section>")
+
+    parts.extend(
+        [
+            '<section id="verification-commands" aria-labelledby="verification-commands-heading">',
+            '<h2 id="verification-commands-heading">Verification Commands</h2>',
+            "<ul>",
+            "<li><code>python -m unittest</code></li>",
+            "<li><code>python scripts/selfcheck.py</code></li>",
+            "<li><code>python -m compileall agent_context_dashboard tests scripts</code></li>",
+            "</ul>",
+            "</section>",
+        ]
+    )
+
+    parts.extend(
+        [
+            '<section id="source-reports" aria-labelledby="source-reports-heading">',
+            '<h2 id="source-reports-heading">Source Reports</h2>',
+        ]
+    )
+    if cards:
+        parts.append("<ul>")
+        for card in cards:
+            parts.append(
+                f"<li><code>{_h(_source_id(card))}</code>: {_h(card.tool)}; "
+                f"status: {_h(card.status)}; risks: {card.risk_count}; warnings: {card.warning_count}</li>"
+            )
+        parts.append("</ul>")
+    else:
+        parts.append("<p>No JSON reports were found in the input directory.</p>")
+    parts.extend(["</section>", "</main>", "</body>", "</html>", ""])
+    return "\n".join(parts)
+
+
 def dashboard_payload(
     cards: list[ReportCard],
     generated_at: datetime | None = None,
     comparison: ComparisonResult | None = None,
     compare_trends: list[CompareTrend] | None = None,
+    hub_path: str | None = None,
 ) -> dict[str, Any]:
     stamp = generated_at or datetime.now(timezone.utc)
+    stamp_text = stamp.replace(microsecond=0).isoformat()
     payload = {
-        "generated_at": stamp.replace(microsecond=0).isoformat(),
+        "generated_at": stamp_text,
         "summary": _summary_counts(cards),
         "reports": [_report_payload(card) for card in cards],
         "risks_and_warnings": _risk_payload(cards),
         "next_actions": _next_actions(cards)
         or ["Add JSON reports from agent-context-audit, agent-context-lint, or agent-instruction-guard."],
     }
+    if hub_path is not None:
+        payload["hub"] = {
+            "path": hub_path,
+            "generated_at": stamp_text,
+            "input_count": len(cards),
+        }
     if comparison is not None:
         payload["comparison"] = comparison_payload(comparison)
     if compare_trends:
@@ -466,6 +602,79 @@ def _render_compare_trends(trends: list[CompareTrend]) -> list[str]:
             f"rule issue delta: {_signed_int(trend.rule_issue_delta)}"
         )
     lines.append("")
+    return lines
+
+
+def _render_hub_asset_matrix(cards: list[ReportCard]) -> list[str]:
+    lines = [
+        '<section id="asset-matrix" aria-labelledby="asset-matrix-heading">',
+        '<h2 id="asset-matrix-heading">Asset Matrix</h2>',
+    ]
+    if not cards:
+        lines.extend(["<p>No report assets were found.</p>", "</section>"])
+        return lines
+
+    lines.extend(
+        [
+            '<div class="table-wrap">',
+            "<table>",
+            "<thead>",
+            "<tr>"
+            '<th scope="col">Source</th><th scope="col">Tool</th><th scope="col">Title</th><th scope="col">Status</th>'
+            '<th scope="col">Risks</th><th scope="col">Warnings</th><th scope="col">Summary</th>'
+            "</tr>",
+            "</thead>",
+            "<tbody>",
+        ]
+    )
+    for card in cards:
+        lines.extend(
+            [
+                "<tr>",
+                f"<td><code>{_h(_source_id(card))}</code></td>",
+                f"<td>{_h(card.tool)}</td>",
+                f"<td>{_h(card.title)}</td>",
+                f'<td><span class="status status-{_h(_status_class(card.status))}">{_h(card.status)}</span></td>',
+                f"<td>{card.risk_count}</td>",
+                f"<td>{card.warning_count}</td>",
+                f"<td>{_h(card.summary)}</td>",
+                "</tr>",
+            ]
+        )
+    lines.extend(["</tbody>", "</table>", "</div>", "</section>"])
+    return lines
+
+
+def _render_hub_trend_table(trends: list[CompareTrend]) -> list[str]:
+    lines = [
+        '<div class="table-wrap">',
+        "<table>",
+        "<thead>",
+        "<tr>"
+        '<th scope="col">Source</th><th scope="col">Baseline</th><th scope="col">Current</th>'
+        '<th scope="col">Delta</th><th scope="col">Changed</th><th scope="col">Improved</th>'
+        '<th scope="col">Regressed</th><th scope="col">Rule Issues</th>'
+        "</tr>",
+        "</thead>",
+        "<tbody>",
+    ]
+    for trend in trends:
+        status_class = "pass" if trend.score_delta >= 0 else "regression"
+        lines.extend(
+            [
+                "<tr>",
+                f"<td><code>{_h(trend.source)}</code></td>",
+                f"<td>{_h(_format_number(trend.baseline_score))}</td>",
+                f"<td>{_h(_format_number(trend.current_score))}</td>",
+                f'<td class="{_h(status_class)}">{_h(_signed_number(trend.score_delta))}</td>',
+                f"<td>{trend.changed_file_count}</td>",
+                f"<td>{trend.files_improved_count}</td>",
+                f"<td>{trend.files_regressed_count}</td>",
+                f"<td>{_h(_signed_int(trend.rule_issue_delta))}</td>",
+                "</tr>",
+            ]
+        )
+    lines.extend(["</tbody>", "</table>", "</div>"])
     return lines
 
 

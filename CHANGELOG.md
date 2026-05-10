@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.2
+
+- Added `--hub PATH` for writing a standalone static HTML asset hub landing page.
+- Hub pages include stable Overview, Asset Matrix, Trend Signals, Verification Commands, and Source Reports sections for README or local sharing workflows.
+- JSON dashboards now include `hub` metadata with path, generated timestamp, and input count when hub export is requested.
+- Added synthetic hub export coverage and documentation.
+
 ## 0.4.1
 
 - Added repeatable `--compare PATH` support for `agent-context-audit compare` JSON trend inputs.

@@ -2,12 +2,13 @@ from __future__ import annotations
 
 import argparse
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 from . import __version__
 from .compare import ComparisonResult, compare_to_baseline, load_baseline, load_compare_trends
 from .models import ReportCard
-from .render import render_html, render_json, render_markdown
+from .render import render_html, render_hub_html, render_json, render_markdown
 from .reports import DashboardError, load_reports
 
 
@@ -19,21 +20,44 @@ def build_dashboard(
     recursive: bool = False,
     html_output: Path | None = None,
     compare: list[Path] | None = None,
+    hub: Path | None = None,
 ) -> str:
     cards = load_reports(input_dir, recursive=recursive)
     comparison = compare_to_baseline(cards, load_baseline(baseline)) if baseline else None
     compare_trends = load_compare_trends(compare)
+    generated_at = datetime.now(timezone.utc)
     dashboard = (
-        render_json(cards, comparison=comparison, compare_trends=compare_trends)
+        render_json(
+            cards,
+            generated_at=generated_at,
+            comparison=comparison,
+            compare_trends=compare_trends,
+            hub_path=hub.as_posix() if hub else None,
+        )
         if output_format == "json"
-        else render_markdown(cards, comparison=comparison, compare_trends=compare_trends)
+        else render_markdown(cards, generated_at=generated_at, comparison=comparison, compare_trends=compare_trends)
     )
     if output:
         output.parent.mkdir(parents=True, exist_ok=True)
         output.write_text(dashboard, encoding="utf-8")
     if html_output:
         html_output.parent.mkdir(parents=True, exist_ok=True)
-        html_output.write_text(render_html(cards, comparison=comparison, compare_trends=compare_trends), encoding="utf-8")
+        html_output.write_text(
+            render_html(cards, generated_at=generated_at, comparison=comparison, compare_trends=compare_trends),
+            encoding="utf-8",
+        )
+    if hub:
+        hub.parent.mkdir(parents=True, exist_ok=True)
+        hub.write_text(
+            render_hub_html(
+                cards,
+                generated_at=generated_at,
+                comparison=comparison,
+                compare_trends=compare_trends,
+                input_dir=input_dir.as_posix(),
+            ),
+            encoding="utf-8",
+        )
     return dashboard
 
 
@@ -50,17 +74,39 @@ def main(argv: list[str] | None = None) -> int:
         cards = load_reports(args.input_dir, recursive=args.recursive)
         comparison = compare_to_baseline(cards, load_baseline(args.baseline)) if args.baseline else None
         compare_trends = load_compare_trends(args.compare)
+        generated_at = datetime.now(timezone.utc)
         dashboard = (
-            render_json(cards, comparison=comparison, compare_trends=compare_trends)
+            render_json(
+                cards,
+                generated_at=generated_at,
+                comparison=comparison,
+                compare_trends=compare_trends,
+                hub_path=args.hub.as_posix() if args.hub else None,
+            )
             if args.format == "json"
-            else render_markdown(cards, comparison=comparison, compare_trends=compare_trends)
+            else render_markdown(cards, generated_at=generated_at, comparison=comparison, compare_trends=compare_trends)
         )
         if args.output:
             args.output.parent.mkdir(parents=True, exist_ok=True)
             args.output.write_text(dashboard, encoding="utf-8")
         if args.html_output:
             args.html_output.parent.mkdir(parents=True, exist_ok=True)
-            args.html_output.write_text(render_html(cards, comparison=comparison, compare_trends=compare_trends), encoding="utf-8")
+            args.html_output.write_text(
+                render_html(cards, generated_at=generated_at, comparison=comparison, compare_trends=compare_trends),
+                encoding="utf-8",
+            )
+        if args.hub:
+            args.hub.parent.mkdir(parents=True, exist_ok=True)
+            args.hub.write_text(
+                render_hub_html(
+                    cards,
+                    generated_at=generated_at,
+                    comparison=comparison,
+                    compare_trends=compare_trends,
+                    input_dir=args.input_dir.as_posix(),
+                ),
+                encoding="utf-8",
+            )
     except DashboardError as exc:
         print(f"agent-context-dashboard: error: {exc}", file=sys.stderr)
         return 2
@@ -83,6 +129,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("input_dir", nargs="?", type=Path, help="Directory containing JSON reports.")
     parser.add_argument("-o", "--output", type=Path, help="Write dashboard output to this file.")
     parser.add_argument("--html-output", type=Path, help="Also write a static HTML dashboard summary to this file.")
+    parser.add_argument("--hub", type=Path, help="Also write a standalone static HTML asset hub landing page.")
     parser.add_argument("--format", choices=("markdown", "json"), default="markdown", help="Dashboard output format.")
     parser.add_argument("--baseline", type=Path, help="Compare against a prior JSON dashboard produced by --format json.")
     parser.add_argument(
