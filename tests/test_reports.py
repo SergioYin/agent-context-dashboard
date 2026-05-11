@@ -4,12 +4,13 @@ import json
 import tempfile
 import unittest
 from contextlib import redirect_stdout
+from datetime import datetime
 from io import StringIO
 from pathlib import Path
 
 from agent_context_dashboard.cli import _has_strict_failures, main
 from agent_context_dashboard.compare import ComparisonItem, ComparisonResult, compare_to_baseline, load_baseline
-from agent_context_dashboard.render import render_badge_snippets, render_html, render_hub_html, render_json
+from agent_context_dashboard.render import render_badge_snippets, render_html, render_hub_html, render_json, render_portfolio_markdown
 from agent_context_dashboard.reports import ReportParseError, load_reports, normalize_report
 
 
@@ -336,6 +337,7 @@ class LoadingAndCliTests(unittest.TestCase):
             self.assertEqual(exit_code, 0)
             payload = json.loads(output.read_text(encoding="utf-8"))
             self.assertEqual(payload["hub"]["path"], hub.as_posix())
+            self.assertEqual(payload["hub"]["input_dir"], reports.as_posix())
             self.assertEqual(payload["hub"]["input_count"], 1)
             self.assertEqual(payload["hub"]["generated_at"], payload["generated_at"])
             self.assertEqual(
@@ -361,6 +363,87 @@ class LoadingAndCliTests(unittest.TestCase):
             )
             self.assertIn("<a href=", payload["hub"]["snippets"]["html"][0])
             self.assertTrue(hub.exists())
+
+    def test_cli_writes_portfolio_landing_page_from_hub_metadata(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            reports = root / "reports"
+            reports.mkdir()
+            (reports / "lint.json").write_text(
+                json.dumps(
+                    {
+                        "scanned_files": ["AGENTS.md"],
+                        "summary": {"average_score": 85},
+                        "issues": [{"severity": "warn", "message": "Owner missing"}],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            compare_path = root / "compare.json"
+            compare_path.write_text(
+                json.dumps(
+                    {
+                        "baseline_score": 80,
+                        "current_score": 85,
+                        "changed_file_count": 2,
+                        "files_improved_count": 1,
+                        "rule_issue_delta": -1,
+                    }
+                ),
+                encoding="utf-8",
+            )
+            output = root / "dashboard.json"
+            hub = root / "asset-hub.html"
+            portfolio = root / "portfolio.md"
+
+            exit_code = main(
+                [
+                    str(reports),
+                    "--compare",
+                    str(compare_path),
+                    "--format",
+                    "json",
+                    "--output",
+                    str(output),
+                    "--hub",
+                    str(hub),
+                    "--portfolio",
+                    str(portfolio),
+                ]
+            )
+
+            self.assertEqual(exit_code, 0)
+            text = portfolio.read_text(encoding="utf-8")
+            self.assertIn("# agent-context-dashboard Portfolio Landing Page", text)
+            self.assertIn("## Package Publish Summary", text)
+            self.assertIn("Runtime: Python 3, standard library only", text)
+            self.assertIn(f"Asset hub: `{hub.as_posix()}`", text)
+            self.assertIn("Overall status: risk", text)
+            self.assertIn("Total score delta: +5", text)
+            self.assertIn("[**Agent Context Health:** risk]", text)
+            self.assertIn("`lint.json`: agent-context-lint; status: warn; risks: 1; warnings: 1", text)
+            self.assertIn("Confirm no GitHub workflows", text)
+            payload = json.loads(output.read_text(encoding="utf-8"))
+            self.assertEqual(payload["portfolio"]["path"], portfolio.as_posix())
+            self.assertEqual(payload["portfolio"]["source"], "hub_metadata")
+
+    def test_portfolio_renderer_is_deterministic_with_fixed_timestamp(self) -> None:
+        card = normalize_report(
+            Path("lint.json"),
+            {
+                "scanned_files": ["AGENTS.md"],
+                "summary": {"average_score": 100},
+                "issues": [],
+            },
+        )
+        stamp = datetime.fromisoformat("2026-05-11T00:00:00+00:00")
+
+        first = render_portfolio_markdown([card], generated_at=stamp, hub_path="ASSET_HUB.html", input_dir="reports")
+        second = render_portfolio_markdown([card], generated_at=stamp, hub_path="ASSET_HUB.html", input_dir="reports")
+
+        self.assertEqual(first, second)
+        self.assertIn("Generated: 2026-05-11T00:00:00+00:00", first)
+        self.assertIn("No risks or warnings were detected.", first)
 
     def test_cli_writes_badge_snippet_file(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

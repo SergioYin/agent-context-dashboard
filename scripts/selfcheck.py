@@ -10,6 +10,7 @@ ROOT = Path(__file__).resolve().parents[1]
 OUTPUT = Path("/tmp/agent-context-dashboard-selfcheck.md")
 HUB_OUTPUT = Path("/tmp/agent-context-dashboard-selfcheck-hub.html")
 BADGES_OUTPUT = Path("/tmp/agent-context-dashboard-selfcheck-badges.md")
+PORTFOLIO_OUTPUT = Path("/tmp/agent-context-dashboard-selfcheck-portfolio.md")
 MULTI_OUTPUT = Path("/tmp/agent-context-dashboard-selfcheck-multi.md")
 
 
@@ -26,6 +27,8 @@ def main() -> int:
         str(HUB_OUTPUT),
         "--badge-snippets",
         str(BADGES_OUTPUT),
+        "--portfolio",
+        str(PORTFOLIO_OUTPUT),
         "--output",
         str(OUTPUT),
     ]
@@ -73,6 +76,20 @@ def main() -> int:
         sys.stderr.write(f"Badge snippets missing expected text: {badge_missing}\n")
         return 1
 
+    portfolio = PORTFOLIO_OUTPUT.read_text(encoding="utf-8")
+    portfolio_expected = [
+        "agent-context-dashboard Portfolio Landing Page",
+        "Package Publish Summary",
+        "Portfolio Snapshot",
+        "README Snippets",
+        "Publish Checklist",
+        "Confirm no GitHub workflows",
+    ]
+    portfolio_missing = [text for text in portfolio_expected if text not in portfolio]
+    if portfolio_missing:
+        sys.stderr.write(f"Portfolio landing page missing expected text: {portfolio_missing}\n")
+        return 1
+
     multi_cmd = [
         sys.executable,
         "-m",
@@ -103,7 +120,7 @@ def main() -> int:
         sys.stderr.write(f"Multi-repo dashboard missing expected text: {multi_missing}\n")
         return 1
 
-    print(f"selfcheck ok: {OUTPUT}; {HUB_OUTPUT}; {BADGES_OUTPUT}; {MULTI_OUTPUT}")
+    print(f"selfcheck ok: {OUTPUT}; {HUB_OUTPUT}; {BADGES_OUTPUT}; {PORTFOLIO_OUTPUT}; {MULTI_OUTPUT}")
     return 0
 
 

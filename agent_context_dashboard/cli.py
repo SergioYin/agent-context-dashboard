@@ -8,7 +8,14 @@ from pathlib import Path
 from . import __version__
 from .compare import ComparisonResult, compare_to_baseline, load_baseline, load_compare_trends
 from .models import ReportCard
-from .render import render_badge_snippets, render_html, render_hub_html, render_json, render_markdown
+from .render import (
+    render_badge_snippets,
+    render_html,
+    render_hub_html,
+    render_json,
+    render_markdown,
+    render_portfolio_markdown,
+)
 from .reports import DashboardError, load_reports
 
 
@@ -22,6 +29,7 @@ def build_dashboard(
     compare: list[Path] | None = None,
     hub: Path | None = None,
     badge_snippets: Path | None = None,
+    portfolio: Path | None = None,
 ) -> str:
     cards = load_reports(input_dir, recursive=recursive)
     comparison = compare_to_baseline(cards, load_baseline(baseline)) if baseline else None
@@ -34,6 +42,8 @@ def build_dashboard(
             comparison=comparison,
             compare_trends=compare_trends,
             hub_path=hub.as_posix() if hub else None,
+            portfolio_path=portfolio.as_posix() if portfolio else None,
+            input_dir=input_dir.as_posix(),
         )
         if output_format == "json"
         else render_markdown(cards, generated_at=generated_at, comparison=comparison, compare_trends=compare_trends)
@@ -71,6 +81,19 @@ def build_dashboard(
             ),
             encoding="utf-8",
         )
+    if portfolio:
+        portfolio.parent.mkdir(parents=True, exist_ok=True)
+        portfolio.write_text(
+            render_portfolio_markdown(
+                cards,
+                generated_at=generated_at,
+                comparison=comparison,
+                compare_trends=compare_trends,
+                hub_path=hub.as_posix() if hub else None,
+                input_dir=input_dir.as_posix(),
+            ),
+            encoding="utf-8",
+        )
     return dashboard
 
 
@@ -95,6 +118,8 @@ def main(argv: list[str] | None = None) -> int:
                 comparison=comparison,
                 compare_trends=compare_trends,
                 hub_path=args.hub.as_posix() if args.hub else None,
+                portfolio_path=args.portfolio.as_posix() if args.portfolio else None,
+                input_dir=args.input_dir.as_posix(),
             )
             if args.format == "json"
             else render_markdown(cards, generated_at=generated_at, comparison=comparison, compare_trends=compare_trends)
@@ -132,6 +157,19 @@ def main(argv: list[str] | None = None) -> int:
                 ),
                 encoding="utf-8",
             )
+        if args.portfolio:
+            args.portfolio.parent.mkdir(parents=True, exist_ok=True)
+            args.portfolio.write_text(
+                render_portfolio_markdown(
+                    cards,
+                    generated_at=generated_at,
+                    comparison=comparison,
+                    compare_trends=compare_trends,
+                    hub_path=args.hub.as_posix() if args.hub else None,
+                    input_dir=args.input_dir.as_posix(),
+                ),
+                encoding="utf-8",
+            )
     except DashboardError as exc:
         print(f"agent-context-dashboard: error: {exc}", file=sys.stderr)
         return 2
@@ -159,6 +197,11 @@ def _build_parser() -> argparse.ArgumentParser:
         "--badge-snippets",
         type=Path,
         help="Also write static Markdown and HTML badge snippets for README or release note embedding.",
+    )
+    parser.add_argument(
+        "--portfolio",
+        type=Path,
+        help="Also write a local Markdown package-publish and portfolio landing page from hub metadata.",
     )
     parser.add_argument("--format", choices=("markdown", "json"), default="markdown", help="Dashboard output format.")
     parser.add_argument("--baseline", type=Path, help="Compare against a prior JSON dashboard produced by --format json.")

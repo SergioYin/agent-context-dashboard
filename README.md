@@ -13,6 +13,7 @@ It is built for maintainers and consultants operating multiple AI-agent context 
 - Emits machine-readable JSON for local automation.
 - Writes a static, escaped HTML summary for local review or sharing.
 - Exports a standalone static HTML asset hub landing page with stable sections, deterministic health/trend badges, and local-only badge snippets for sharing multiple report assets.
+- Writes a Markdown package-publish and portfolio landing page from hub metadata for README, Feishu, or local release handoff use.
 - Compares current output against a previous JSON dashboard to surface regressions.
 - Includes score trend deltas from one or more `agent-context-audit compare` JSON files.
 
@@ -30,7 +31,7 @@ For local development without installing:
 python -m agent_context_dashboard examples/reports --output examples/DASHBOARD.md
 python -m agent_context_dashboard examples/reports --output examples/DASHBOARD.md --html-output examples/DASHBOARD.html
 python -m agent_context_dashboard examples/reports --compare examples/compare.json --hub examples/ASSET_HUB.html
-python -m agent_context_dashboard examples/multi-repo-reports --recursive --compare examples/multi-repo-compare.json --hub examples/ASSET_HUB.html --badge-snippets examples/BADGES.md
+python -m agent_context_dashboard examples/multi-repo-reports --recursive --compare examples/multi-repo-compare.json --hub examples/ASSET_HUB.html --badge-snippets examples/BADGES.md --portfolio examples/PORTFOLIO.md
 ```
 
 ## Usage
@@ -47,7 +48,7 @@ Sample command:
 python -m agent_context_dashboard build examples/reports --output examples/DASHBOARD.md
 python -m agent_context_dashboard build examples/reports --output examples/DASHBOARD.md --html-output examples/DASHBOARD.html
 python -m agent_context_dashboard build examples/reports --compare examples/compare.json --hub examples/ASSET_HUB.html
-python -m agent_context_dashboard build examples/multi-repo-reports --recursive --compare examples/multi-repo-compare.json --hub examples/MULTI_REPO_ASSET_HUB.html --badge-snippets examples/MULTI_REPO_BADGES.md
+python -m agent_context_dashboard build examples/multi-repo-reports --recursive --compare examples/multi-repo-compare.json --hub examples/MULTI_REPO_ASSET_HUB.html --badge-snippets examples/MULTI_REPO_BADGES.md --portfolio examples/MULTI_REPO_PORTFOLIO.md
 ```
 
 SARIF files can live beside the other JSON reports. For example, include SARIF emitted by `agent-instruction-guard` and build the dashboard from that shared report directory:
@@ -95,6 +96,15 @@ python -m agent_context_dashboard examples/multi-repo-reports --recursive --comp
 ```
 
 The snippets are static text/HTML that link to the hub page. They do not use remote badge image services or callbacks. Hub HTML exports also include a `Badge Snippets` section, and JSON dashboards produced with `--hub` include the same data under `hub.snippets`.
+
+Use `--portfolio` to write a Markdown package-publish and portfolio landing page from the same hub metadata used by the hub JSON object:
+
+```bash
+python -m agent_context_dashboard examples/reports --compare examples/compare.json --hub examples/ASSET_HUB.html --portfolio examples/PORTFOLIO.md --output examples/DASHBOARD.md
+python -m agent_context_dashboard examples/multi-repo-reports --recursive --compare examples/multi-repo-compare.json --hub examples/MULTI_REPO_ASSET_HUB.html --badge-snippets examples/MULTI_REPO_BADGES.md --portfolio examples/MULTI_REPO_PORTFOLIO.md --output examples/MULTI_REPO_DASHBOARD.md
+```
+
+The portfolio page is Markdown and deterministic for the same normalized reports, compare inputs, hub path, and generated timestamp. It includes package publish commands, hub badge summaries, README snippets, report asset inventory, risk notes, and a local publish checklist. It does not call package registries, remote badge services, GitHub Actions, SaaS callbacks, telemetry, or token-backed APIs. JSON dashboards produced with `--portfolio` include a `portfolio` object with the output path, format, generated timestamp, and `source: "hub_metadata"`.
 
 By default, only top-level `*.json` files in the reports directory are read. Use `--recursive` for multi-repo report workspaces where companion tools write under per-repo subdirectories:
 
@@ -222,7 +232,7 @@ python -m unittest
 python -m unittest discover -s tests -v
 python scripts/selfcheck.py
 python -m compileall agent_context_dashboard tests scripts
-python -m agent_context_dashboard examples/reports --compare examples/compare.json --hub /tmp/agent-context-dashboard-hub.html --badge-snippets /tmp/agent-context-dashboard-badges.md --output /tmp/agent-context-dashboard.md
+python -m agent_context_dashboard examples/reports --compare examples/compare.json --hub /tmp/agent-context-dashboard-hub.html --badge-snippets /tmp/agent-context-dashboard-badges.md --portfolio /tmp/agent-context-dashboard-portfolio.md --output /tmp/agent-context-dashboard.md
 ```
 
-The selfcheck reads `examples/reports` and `examples/multi-repo-reports`, writes temporary Markdown/HTML/snippet artifacts under `/tmp`, and asserts key dashboard, hub, badge, and recursive multi-repo strings.
+The selfcheck reads `examples/reports` and `examples/multi-repo-reports`, writes temporary Markdown/HTML/snippet/portfolio artifacts under `/tmp`, and asserts key dashboard, hub, badge, portfolio, and recursive multi-repo strings.

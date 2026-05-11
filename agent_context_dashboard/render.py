@@ -75,6 +75,8 @@ def render_json(
     comparison: ComparisonResult | None = None,
     compare_trends: list[CompareTrend] | None = None,
     hub_path: str | None = None,
+    portfolio_path: str | None = None,
+    input_dir: str | None = None,
 ) -> str:
     payload = dashboard_payload(
         cards,
@@ -82,6 +84,8 @@ def render_json(
         comparison=comparison,
         compare_trends=compare_trends,
         hub_path=hub_path,
+        portfolio_path=portfolio_path,
+        input_dir=input_dir,
     )
     return json.dumps(payload, indent=2, sort_keys=True) + "\n"
 
@@ -172,6 +176,103 @@ def render_badge_snippets(
     return "\n".join(lines)
 
 
+def render_portfolio_markdown(
+    cards: list[ReportCard],
+    generated_at: datetime | None = None,
+    comparison: ComparisonResult | None = None,
+    compare_trends: list[CompareTrend] | None = None,
+    hub_path: str | None = None,
+    input_dir: str | None = None,
+    package_name: str = "agent-context-dashboard",
+) -> str:
+    metadata = hub_metadata(
+        cards,
+        generated_at=generated_at,
+        comparison=comparison,
+        compare_trends=compare_trends,
+        hub_path=hub_path,
+        input_dir=input_dir,
+    )
+    summary = metadata["summary"]
+    trend_summary = metadata["trend_summary"]
+    source_reports = metadata["source_reports"]
+    risk_items = metadata["risks_and_warnings"]
+    badges = metadata["badges"]
+    snippets = metadata["snippets"]
+
+    lines = [
+        f"# {package_name} Portfolio Landing Page",
+        "",
+        f"Generated: {metadata['generated_at']}",
+        "",
+        "## Package Publish Summary",
+        "",
+        f"- Package: `{package_name}`",
+        "- Runtime: Python 3, standard library only",
+        "- Install from source: `python -m pip install .`",
+        f"- CLI smoke test: `python -m {package_name.replace('-', '_')} --version`",
+        f"- Source reports: `{metadata['input_dir']}`",
+    ]
+    if hub_path:
+        lines.append(f"- Asset hub: `{hub_path}`")
+    lines.extend(
+        [
+            "",
+            "## Portfolio Snapshot",
+            "",
+            f"- Overall status: {metadata['overall_status']}",
+            f"- Reports scanned: {summary['reports_scanned']}",
+            f"- Passing reports: {summary['passing_reports']}",
+            f"- Reports with risk: {summary['reports_with_risk']}",
+            f"- Warnings: {summary['warnings']}",
+            f"- Unknown schemas: {summary['unknown_schemas']}",
+            f"- Compare entries: {trend_summary['total_entries']}",
+            f"- Total score delta: {_signed_number(float(trend_summary['total_score_delta']))}",
+            f"- Rule issue delta: {_signed_int(int(trend_summary['rule_issue_delta']))}",
+            "",
+            "## Hub Badges",
+            "",
+        ]
+    )
+    for badge in badges:
+        lines.append(f"- {badge['label']}: {badge['value']} - {badge['message']}")
+    lines.extend(["", "## README Snippets", ""])
+    lines.extend(f"- {snippet}" for snippet in snippets["markdown"])
+
+    lines.extend(["", "## Report Assets", ""])
+    if source_reports:
+        for report in source_reports:
+            lines.append(
+                "- "
+                f"`{report['source']}`: {report['tool']}; "
+                f"status: {report['status']}; risks: {report['risk_count']}; warnings: {report['warning_count']}"
+            )
+    else:
+        lines.append("- No JSON reports were found in the input directory.")
+
+    lines.extend(["", "## Risk Notes", ""])
+    if risk_items:
+        for item in risk_items[:8]:
+            lines.append(f"- `{item['source']}` {item['kind'].replace('_', ' ')}: {item['message']}")
+    else:
+        lines.append("- No risks or warnings were detected.")
+
+    lines.extend(
+        [
+            "",
+            "## Publish Checklist",
+            "",
+            "- `python -m unittest`",
+            "- `python scripts/selfcheck.py`",
+            "- `python -m compileall agent_context_dashboard tests scripts`",
+            "- Confirm generated portfolio, dashboard, hub, and badge artifacts are local static files.",
+            "- Confirm no GitHub workflows, SaaS callbacks, telemetry, token handling, or remote badge services were added.",
+            "",
+        ]
+    )
+    return "\n".join(lines)
+
+
 def render_hub_html(
     cards: list[ReportCard],
     generated_at: datetime | None = None,
@@ -181,13 +282,21 @@ def render_hub_html(
 ) -> str:
     stamp = generated_at or datetime.now(timezone.utc)
     stamp_text = stamp.replace(microsecond=0).isoformat()
-    summary = _summary_counts(cards)
-    overall_status = _overall_status(cards, comparison)
-    risk_items = _risk_payload(cards)
-    trend_summary = compare_trends_summary(compare_trends or [])
-    badges = _hub_badges(cards, comparison, compare_trends or [])
-    snippets = _badge_snippets(badges, hub_href="#overview")
     source_label = input_dir or "."
+    metadata = hub_metadata(
+        cards,
+        generated_at=stamp,
+        comparison=comparison,
+        compare_trends=compare_trends,
+        hub_path="#overview",
+        input_dir=source_label,
+    )
+    summary = metadata["summary"]
+    overall_status = metadata["overall_status"]
+    risk_items = metadata["risks_and_warnings"]
+    trend_summary = metadata["trend_summary"]
+    badges = metadata["badges"]
+    snippets = metadata["snippets"]
 
     parts = [
         "<!doctype html>",
@@ -304,12 +413,56 @@ def render_hub_html(
     return "\n".join(parts)
 
 
+def hub_metadata(
+    cards: list[ReportCard],
+    generated_at: datetime | None = None,
+    comparison: ComparisonResult | None = None,
+    compare_trends: list[CompareTrend] | None = None,
+    hub_path: str | None = None,
+    input_dir: str | None = None,
+) -> dict[str, Any]:
+    stamp = generated_at or datetime.now(timezone.utc)
+    stamp_text = stamp.replace(microsecond=0).isoformat()
+    trends = compare_trends or []
+    badges = _hub_badges(cards, comparison, trends)
+    return {
+        "generated_at": stamp_text,
+        "input_dir": input_dir or ".",
+        "input_count": len(cards),
+        "summary": _summary_counts(cards),
+        "overall_status": _overall_status(cards, comparison),
+        "badges": badges,
+        "snippets": _badge_snippets(badges, hub_href=hub_path),
+        "trend_summary": compare_trends_summary(trends),
+        "risks_and_warnings": _risk_payload(cards),
+        "verification_commands": [
+            "python -m unittest",
+            "python scripts/selfcheck.py",
+            "python -m compileall agent_context_dashboard tests scripts",
+        ],
+        "source_reports": [
+            {
+                "source": _source_id(card),
+                "tool": card.tool,
+                "title": card.title,
+                "status": card.status,
+                "risk_count": card.risk_count,
+                "warning_count": card.warning_count,
+                "summary": card.summary,
+            }
+            for card in cards
+        ],
+    }
+
+
 def dashboard_payload(
     cards: list[ReportCard],
     generated_at: datetime | None = None,
     comparison: ComparisonResult | None = None,
     compare_trends: list[CompareTrend] | None = None,
     hub_path: str | None = None,
+    portfolio_path: str | None = None,
+    input_dir: str | None = None,
 ) -> dict[str, Any]:
     stamp = generated_at or datetime.now(timezone.utc)
     stamp_text = stamp.replace(microsecond=0).isoformat()
@@ -322,13 +475,22 @@ def dashboard_payload(
         or ["Add JSON reports from agent-context-audit, agent-context-lint, or agent-instruction-guard."],
     }
     if hub_path is not None:
-        payload["hub"] = {
-            "path": hub_path,
+        payload["hub"] = hub_metadata(
+            cards,
+            generated_at=stamp,
+            comparison=comparison,
+            compare_trends=compare_trends,
+            hub_path=hub_path,
+            input_dir=input_dir,
+        )
+        payload["hub"]["path"] = hub_path
+    if portfolio_path is not None:
+        payload["portfolio"] = {
+            "path": portfolio_path,
+            "source": "hub_metadata",
+            "format": "markdown",
             "generated_at": stamp_text,
-            "input_count": len(cards),
-            "badges": _hub_badges(cards, comparison, compare_trends or []),
         }
-        payload["hub"]["snippets"] = _badge_snippets(payload["hub"]["badges"], hub_href=hub_path)
     if comparison is not None:
         payload["comparison"] = comparison_payload(comparison)
     if compare_trends:

@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.5
+
+- Added `--portfolio PATH` for writing a local Markdown package-publish and portfolio landing page from the same hub metadata used by JSON hub exports.
+- Portfolio pages include package install/smoke-test commands, deterministic hub badge summaries, report asset inventory, risk notes, and a publish checklist.
+- JSON dashboards now include a `portfolio` metadata object when `--portfolio` is used.
+- Expanded tests and selfcheck coverage for portfolio output and deterministic renderer behavior.
+
 ## 0.4.4
 
 - Added `--badge-snippets PATH` for writing static Markdown and HTML badge snippets that link to the generated asset hub.
