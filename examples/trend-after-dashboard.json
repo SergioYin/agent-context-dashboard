@@ -1,0 +1,54 @@
+{
+  "generated_at": "2026-05-11T00:00:00+00:00",
+  "next_actions": [
+    "Fix lint violations."
+  ],
+  "reports": [
+    {
+      "details": {
+        "score": 91
+      },
+      "next_actions": [],
+      "risk_count": 0,
+      "source": "audit.json",
+      "status": "pass",
+      "summary": "score: 91; 0 finding(s)",
+      "title": "synthetic-repo",
+      "tool": "agent-context-audit",
+      "warning_count": 0,
+      "warnings": []
+    },
+    {
+      "details": {
+        "score": 84
+      },
+      "next_actions": [
+        "Fix lint violations."
+      ],
+      "risk_count": 0,
+      "source": "lint.json",
+      "status": "warn",
+      "summary": "score 84; 1 violation(s)",
+      "title": "AGENTS.md",
+      "tool": "agent-context-lint",
+      "warning_count": 1,
+      "warnings": [
+        "New formatting warning"
+      ]
+    }
+  ],
+  "risks_and_warnings": [
+    {
+      "kind": "warning",
+      "message": "New formatting warning",
+      "source": "lint.json"
+    }
+  ],
+  "summary": {
+    "passing_reports": 1,
+    "reports_scanned": 2,
+    "reports_with_risk": 0,
+    "unknown_schemas": 0,
+    "warnings": 1
+  }
+}

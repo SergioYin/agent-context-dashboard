@@ -8,6 +8,7 @@ from pathlib import Path
 from agent_context_dashboard.compare import BaselineError, compare_to_baseline, load_baseline, load_compare_trend
 from agent_context_dashboard.reports import normalize_report
 from agent_context_dashboard.render import render_html, render_json, render_markdown
+from agent_context_dashboard.trend import compare_dashboards, render_trend_json, render_trend_markdown
 
 
 class BaselineComparisonTests(unittest.TestCase):
@@ -159,6 +160,74 @@ class BaselineComparisonTests(unittest.TestCase):
         self.assertEqual(payload["compare_entries"][0]["source"], path.as_posix())
         self.assertIn("Score Trends", html)
         self.assertIn('class="regression">-3</td>', html)
+
+    def test_dashboard_trend_compares_scores_warnings_and_readiness(self) -> None:
+        baseline = {
+            "generated_at": "2026-05-10T00:00:00+00:00",
+            "summary": {"reports_scanned": 2, "reports_with_risk": 1, "warnings": 2, "unknown_schemas": 0},
+            "reports": [
+                {
+                    "source": "audit.json",
+                    "tool": "agent-context-audit",
+                    "status": "C",
+                    "risk_count": 1,
+                    "warning_count": 1,
+                    "warnings": ["Missing owner"],
+                    "details": {"score": 72},
+                },
+                {
+                    "source": "lint.json",
+                    "tool": "agent-context-lint",
+                    "status": "warn",
+                    "risk_count": 1,
+                    "warning_count": 1,
+                    "warnings": ["Line too long"],
+                    "details": {"score": 88},
+                },
+            ],
+        }
+        current = {
+            "generated_at": "2026-05-11T00:00:00+00:00",
+            "summary": {"reports_scanned": 2, "reports_with_risk": 0, "warnings": 1, "unknown_schemas": 0},
+            "reports": [
+                {
+                    "source": "audit.json",
+                    "tool": "agent-context-audit",
+                    "status": "pass",
+                    "risk_count": 0,
+                    "warning_count": 0,
+                    "warnings": [],
+                    "details": {"score": 91},
+                },
+                {
+                    "source": "lint.json",
+                    "tool": "agent-context-lint",
+                    "status": "warn",
+                    "risk_count": 0,
+                    "warning_count": 1,
+                    "warnings": ["New formatting warning"],
+                    "details": {"score": 84},
+                },
+            ],
+        }
+
+        trend = compare_dashboards(baseline, current, baseline_path="before.json", current_path="after.json")
+        markdown = render_trend_markdown(trend)
+        payload = json.loads(render_trend_json(trend))
+
+        self.assertIn("# Agent Context Dashboard Trend", markdown)
+        self.assertIn("Release readiness: blocked -> review (improved)", markdown)
+        self.assertIn("`audit.json` (agent-context-audit): 72 -> 91 (+19)", markdown)
+        self.assertIn("`lint.json` (agent-context-lint): New formatting warning", markdown)
+        self.assertIn("`audit.json` (agent-context-audit): Missing owner", markdown)
+        self.assertEqual(payload["summary"]["score_change_count"], 2)
+        self.assertEqual(payload["summary"]["improved_scores"], 1)
+        self.assertEqual(payload["summary"]["regressed_scores"], 1)
+        self.assertEqual(payload["summary"]["total_score_delta"], 15)
+        self.assertEqual(payload["summary"]["new_warning_count"], 1)
+        self.assertEqual(payload["summary"]["resolved_warning_count"], 2)
+        self.assertEqual(payload["readiness"]["movement"], "improved")
+        self.assertEqual(payload["score_deltas"][0]["source"], "audit.json")
 
 
 if __name__ == "__main__":

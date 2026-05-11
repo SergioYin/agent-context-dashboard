@@ -12,6 +12,7 @@ HUB_OUTPUT = Path("/tmp/agent-context-dashboard-selfcheck-hub.html")
 BADGES_OUTPUT = Path("/tmp/agent-context-dashboard-selfcheck-badges.md")
 PORTFOLIO_OUTPUT = Path("/tmp/agent-context-dashboard-selfcheck-portfolio.md")
 MULTI_OUTPUT = Path("/tmp/agent-context-dashboard-selfcheck-multi.md")
+TREND_OUTPUT = Path("/tmp/agent-context-dashboard-selfcheck-trend.md")
 
 
 def main() -> int:
@@ -120,7 +121,38 @@ def main() -> int:
         sys.stderr.write(f"Multi-repo dashboard missing expected text: {multi_missing}\n")
         return 1
 
-    print(f"selfcheck ok: {OUTPUT}; {HUB_OUTPUT}; {BADGES_OUTPUT}; {PORTFOLIO_OUTPUT}; {MULTI_OUTPUT}")
+    trend_cmd = [
+        sys.executable,
+        "-m",
+        "agent_context_dashboard",
+        "trend",
+        str(ROOT / "examples" / "trend-before-dashboard.json"),
+        str(ROOT / "examples" / "trend-after-dashboard.json"),
+        "--output",
+        str(TREND_OUTPUT),
+    ]
+    trend_result = subprocess.run(trend_cmd, cwd=ROOT, text=True, capture_output=True)
+    if trend_result.returncode != 0:
+        sys.stderr.write(trend_result.stderr)
+        return trend_result.returncode
+
+    trend_dashboard = TREND_OUTPUT.read_text(encoding="utf-8")
+    trend_expected = [
+        "Agent Context Dashboard Trend",
+        "Release readiness: blocked -> review (improved)",
+        "`audit.json` (agent-context-audit): 72 -> 91 (+19)",
+        "New formatting warning",
+        "Missing owner metadata",
+    ]
+    trend_missing = [text for text in trend_expected if text not in trend_dashboard]
+    if trend_missing:
+        sys.stderr.write(f"Trend dashboard missing expected text: {trend_missing}\n")
+        return 1
+
+    print(
+        "selfcheck ok: "
+        f"{OUTPUT}; {HUB_OUTPUT}; {BADGES_OUTPUT}; {PORTFOLIO_OUTPUT}; {MULTI_OUTPUT}; {TREND_OUTPUT}"
+    )
     return 0
 
 

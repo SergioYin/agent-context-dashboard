@@ -17,6 +17,7 @@ from .render import (
     render_portfolio_markdown,
 )
 from .reports import DashboardError, load_reports
+from .trend import load_trend, render_trend_json, render_trend_markdown
 
 
 def build_dashboard(
@@ -107,6 +108,16 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     try:
+        if command == "trend":
+            trend = load_trend(args.baseline_dashboard, args.current_dashboard)
+            dashboard = render_trend_json(trend) if args.format == "json" else render_trend_markdown(trend)
+            if args.output:
+                args.output.parent.mkdir(parents=True, exist_ok=True)
+                args.output.write_text(dashboard, encoding="utf-8")
+            else:
+                print(dashboard, end="" if dashboard.endswith("\n") else "\n")
+            return 0
+
         cards = load_reports(args.input_dir, recursive=args.recursive)
         comparison = compare_to_baseline(cards, load_baseline(args.baseline)) if args.baseline else None
         compare_trends = load_compare_trends(args.compare)
@@ -228,6 +239,23 @@ def _build_parser() -> argparse.ArgumentParser:
 
     def parse_args(args: list[str] | None = None, namespace: argparse.Namespace | None = None) -> argparse.Namespace:
         raw = list(sys.argv[1:] if args is None else args)
+        if raw and raw[0] == "trend":
+            trend_parser = argparse.ArgumentParser(
+                prog="agent-context-dashboard trend",
+                description="Compare two JSON dashboards and render deterministic trend deltas.",
+            )
+            trend_parser.add_argument("baseline_dashboard", type=Path, help="Earlier JSON dashboard from --format json.")
+            trend_parser.add_argument("current_dashboard", type=Path, help="Later JSON dashboard from --format json.")
+            trend_parser.add_argument("-o", "--output", type=Path, help="Write trend output to this file.")
+            trend_parser.add_argument(
+                "--format",
+                choices=("markdown", "json"),
+                default="markdown",
+                help="Trend output format.",
+            )
+            parsed = trend_parser.parse_args(raw[1:], namespace)
+            parsed.command = "trend"
+            return parsed
         if raw and raw[0] == "build":
             raw.pop(0)
         if raw and raw[0] == "version":

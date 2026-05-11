@@ -1,0 +1,64 @@
+{
+  "generated_at": "2026-05-10T00:00:00+00:00",
+  "next_actions": [
+    "Review audit findings.",
+    "Fix lint violations."
+  ],
+  "reports": [
+    {
+      "details": {
+        "score": 72
+      },
+      "next_actions": [
+        "Review audit findings."
+      ],
+      "risk_count": 1,
+      "source": "audit.json",
+      "status": "C",
+      "summary": "score: 72; 1 finding(s)",
+      "title": "synthetic-repo",
+      "tool": "agent-context-audit",
+      "warning_count": 1,
+      "warnings": [
+        "Missing owner metadata"
+      ]
+    },
+    {
+      "details": {
+        "score": 88
+      },
+      "next_actions": [
+        "Fix lint violations."
+      ],
+      "risk_count": 1,
+      "source": "lint.json",
+      "status": "warn",
+      "summary": "score 88; 1 violation(s)",
+      "title": "AGENTS.md",
+      "tool": "agent-context-lint",
+      "warning_count": 1,
+      "warnings": [
+        "Line length exceeds local policy"
+      ]
+    }
+  ],
+  "risks_and_warnings": [
+    {
+      "kind": "warning",
+      "message": "Missing owner metadata",
+      "source": "audit.json"
+    },
+    {
+      "kind": "warning",
+      "message": "Line length exceeds local policy",
+      "source": "lint.json"
+    }
+  ],
+  "summary": {
+    "passing_reports": 0,
+    "reports_scanned": 2,
+    "reports_with_risk": 2,
+    "unknown_schemas": 0,
+    "warnings": 2
+  }
+}

@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.5.0
+
+- Added `trend BEFORE.json AFTER.json` mode for comparing two dashboard JSON outputs without rebuilding source reports.
+- Trend Markdown and JSON output now include comparable score deltas, new/resolved warning messages, and release-readiness movement across `ready`, `review`, and `blocked` states.
+- Added synthetic trend dashboard fixtures and a README/Feishu-friendly Markdown trend example.
+- Expanded CLI, renderer, and selfcheck coverage for deterministic trend output.
+
 ## 0.4.5
 
 - Added `--portfolio PATH` for writing a local Markdown package-publish and portfolio landing page from the same hub metadata used by JSON hub exports.

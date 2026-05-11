@@ -813,6 +813,110 @@ class LoadingAndCliTests(unittest.TestCase):
             self.assertEqual(payload["compare_entries"][0]["score_delta"], 8)
             self.assertEqual(payload["compare_entries"][0]["source"], compare_a.as_posix())
 
+    def test_cli_trend_writes_dashboard_delta_json(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            reports = root / "reports"
+            reports.mkdir()
+            (reports / "lint.json").write_text(
+                json.dumps({"scanned_files": ["AGENTS.md"], "summary": {"average_score": 85}, "issues": []}),
+                encoding="utf-8",
+            )
+            before = root / "before.json"
+            after = root / "after.json"
+            output = root / "trend.json"
+
+            self.assertEqual(main([str(reports), "--format", "json", "--output", str(before)]), 0)
+            (reports / "lint.json").write_text(
+                json.dumps(
+                    {
+                        "scanned_files": ["AGENTS.md"],
+                        "summary": {"average_score": 92},
+                        "issues": [{"severity": "warn", "message": "Owner missing"}],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            self.assertEqual(main([str(reports), "--format", "json", "--output", str(after)]), 0)
+
+            exit_code = main(["trend", str(before), str(after), "--format", "json", "--output", str(output)])
+
+            self.assertEqual(exit_code, 0)
+            payload = json.loads(output.read_text(encoding="utf-8"))
+            self.assertEqual(payload["summary"]["score_change_count"], 1)
+            self.assertEqual(payload["summary"]["total_score_delta"], 7)
+            self.assertEqual(payload["summary"]["new_warning_count"], 1)
+            self.assertEqual(payload["readiness"]["baseline_state"], "ready")
+            self.assertEqual(payload["readiness"]["current_state"], "blocked")
+            self.assertEqual(payload["readiness"]["movement"], "regressed")
+
+    def test_cli_trend_prints_markdown_to_stdout(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            before = root / "before.json"
+            after = root / "after.json"
+            before.write_text(
+                json.dumps(
+                    {
+                        "generated_at": "2026-05-10T00:00:00+00:00",
+                        "summary": {"reports_scanned": 1, "reports_with_risk": 0, "warnings": 1},
+                        "reports": [
+                            {
+                                "source": "audit.json",
+                                "tool": "agent-context-audit",
+                                "status": "warn",
+                                "risk_count": 0,
+                                "warning_count": 1,
+                                "warnings": ["Missing owner"],
+                                "details": {"score": 80},
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            after.write_text(
+                json.dumps(
+                    {
+                        "generated_at": "2026-05-11T00:00:00+00:00",
+                        "summary": {"reports_scanned": 1, "reports_with_risk": 0, "warnings": 0},
+                        "reports": [
+                            {
+                                "source": "audit.json",
+                                "tool": "agent-context-audit",
+                                "status": "pass",
+                                "risk_count": 0,
+                                "warning_count": 0,
+                                "warnings": [],
+                                "details": {"score": 90},
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            stdout = StringIO()
+
+            with redirect_stdout(stdout):
+                exit_code = main(["trend", str(before), str(after)])
+
+            self.assertEqual(exit_code, 0)
+            text = stdout.getvalue()
+            self.assertIn("# Agent Context Dashboard Trend", text)
+            self.assertIn("review -> ready (improved)", text)
+            self.assertIn("80 -> 90 (+10)", text)
+            self.assertIn("Missing owner", text)
+
+    def test_cli_trend_returns_error_for_non_dashboard_json(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            before = root / "before.json"
+            after = root / "after.json"
+            before.write_text(json.dumps({"reports": "not-a-list"}), encoding="utf-8")
+            after.write_text(json.dumps({"reports": []}), encoding="utf-8")
+
+            self.assertEqual(main(["trend", str(before), str(after)]), 2)
+
     def test_cli_markdown_and_html_include_compare_trends(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

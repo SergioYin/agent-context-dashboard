@@ -16,6 +16,7 @@ It is built for maintainers and consultants operating multiple AI-agent context 
 - Writes a Markdown package-publish and portfolio landing page from hub metadata for README, Feishu, or local release handoff use.
 - Compares current output against a previous JSON dashboard to surface regressions.
 - Includes score trend deltas from one or more `agent-context-audit compare` JSON files.
+- Compares two dashboard JSON outputs in `trend` mode to render deterministic Markdown or JSON deltas for score changes, new/resolved warnings, and release-readiness movement.
 
 ## Install From Source
 
@@ -32,6 +33,7 @@ python -m agent_context_dashboard examples/reports --output examples/DASHBOARD.m
 python -m agent_context_dashboard examples/reports --output examples/DASHBOARD.md --html-output examples/DASHBOARD.html
 python -m agent_context_dashboard examples/reports --compare examples/compare.json --hub examples/ASSET_HUB.html
 python -m agent_context_dashboard examples/multi-repo-reports --recursive --compare examples/multi-repo-compare.json --hub examples/ASSET_HUB.html --badge-snippets examples/BADGES.md --portfolio examples/PORTFOLIO.md
+python -m agent_context_dashboard trend examples/trend-before-dashboard.json examples/trend-after-dashboard.json --output examples/TREND.md
 ```
 
 ## Usage
@@ -39,6 +41,7 @@ python -m agent_context_dashboard examples/multi-repo-reports --recursive --comp
 ```bash
 agent-context-dashboard <reports-dir> --output DASHBOARD.md
 agent-context-dashboard build <reports-dir> --output DASHBOARD.md
+agent-context-dashboard trend BEFORE-DASHBOARD.json AFTER-DASHBOARD.json --output TREND.md
 python -m agent_context_dashboard <reports-dir> --output DASHBOARD.md
 ```
 
@@ -49,6 +52,7 @@ python -m agent_context_dashboard build examples/reports --output examples/DASHB
 python -m agent_context_dashboard build examples/reports --output examples/DASHBOARD.md --html-output examples/DASHBOARD.html
 python -m agent_context_dashboard build examples/reports --compare examples/compare.json --hub examples/ASSET_HUB.html
 python -m agent_context_dashboard build examples/multi-repo-reports --recursive --compare examples/multi-repo-compare.json --hub examples/MULTI_REPO_ASSET_HUB.html --badge-snippets examples/MULTI_REPO_BADGES.md --portfolio examples/MULTI_REPO_PORTFOLIO.md
+python -m agent_context_dashboard trend examples/trend-before-dashboard.json examples/trend-after-dashboard.json --output examples/TREND.md
 ```
 
 SARIF files can live beside the other JSON reports. For example, include SARIF emitted by `agent-instruction-guard` and build the dashboard from that shared report directory:
@@ -170,6 +174,24 @@ Markdown and HTML output include a `Score Trends` section with baseline score, c
 - `compare_summary`: aggregate entry counts, total score delta, file counts, and rule issue delta.
 - `compare_entries`: one entry per compare input with `source`, `baseline_score`, `current_score`, `score_delta`, `changed_file_count`, `added_file_count`, `removed_file_count`, `files_improved_count`, `files_regressed_count`, and `rule_issue_delta`.
 
+Compare two full dashboard JSON files with `trend` mode when you want a release-note-friendly delta between snapshots instead of rebuilding from source reports:
+
+```bash
+python -m agent_context_dashboard examples/reports --format json --output /tmp/dashboard-before.json
+python -m agent_context_dashboard examples/reports --format json --output /tmp/dashboard-after.json
+python -m agent_context_dashboard trend /tmp/dashboard-before.json /tmp/dashboard-after.json --output /tmp/dashboard-trend.md
+python -m agent_context_dashboard trend /tmp/dashboard-before.json /tmp/dashboard-after.json --format json --output /tmp/dashboard-trend.json
+```
+
+Trend mode accepts only dashboard JSON produced by `--format json`. Markdown output includes `Score Changes`, `New Warnings`, `Resolved Warnings`, and `Release Readiness` sections. JSON output includes:
+
+- `summary`: score delta counts, total score delta, warning delta counts, and release-readiness movement.
+- `score_deltas`: comparable report score movements keyed by `source` and `tool`.
+- `new_warnings` and `resolved_warnings`: warning message deltas keyed by `source` and `tool`.
+- `readiness`: `ready`, `review`, or `blocked` state movement with deterministic ranks.
+
+Release readiness is derived locally from dashboard report status, risk counts, warning counts, and unknown schemas. `ready` means no risks, warnings, or unknown schemas; `review` means warnings or unknown schemas but no blocking risk; `blocked` means at least one risky, failed, error, or blocked report. See `examples/TREND.md` for a synthetic Markdown example.
+
 ## Supported Report Schemas
 
 ### agent-context-audit
@@ -233,6 +255,7 @@ python -m unittest discover -s tests -v
 python scripts/selfcheck.py
 python -m compileall agent_context_dashboard tests scripts
 python -m agent_context_dashboard examples/reports --compare examples/compare.json --hub /tmp/agent-context-dashboard-hub.html --badge-snippets /tmp/agent-context-dashboard-badges.md --portfolio /tmp/agent-context-dashboard-portfolio.md --output /tmp/agent-context-dashboard.md
+python -m agent_context_dashboard trend examples/trend-before-dashboard.json examples/trend-after-dashboard.json --output /tmp/agent-context-dashboard-trend.md
 ```
 
-The selfcheck reads `examples/reports` and `examples/multi-repo-reports`, writes temporary Markdown/HTML/snippet/portfolio artifacts under `/tmp`, and asserts key dashboard, hub, badge, portfolio, and recursive multi-repo strings.
+The selfcheck reads `examples/reports`, `examples/multi-repo-reports`, and synthetic trend dashboard snapshots, writes temporary Markdown/HTML/snippet/portfolio/trend artifacts under `/tmp`, and asserts key dashboard, hub, badge, portfolio, recursive multi-repo, and trend strings.
