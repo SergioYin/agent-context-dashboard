@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.3
+
+- Added deterministic Health and Trend badges to static asset hub HTML exports.
+- JSON dashboards now include the same `hub.badges` data when hub export is requested.
+- Documented the hub badge output and added regression coverage.
+
 ## 0.4.2
 
 - Added `--hub PATH` for writing a standalone static HTML asset hub landing page.

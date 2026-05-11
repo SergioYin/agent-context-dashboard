@@ -12,7 +12,7 @@ It is built for maintainers and consultants operating multiple AI-agent context 
 - Generates a README/Feishu-friendly Markdown dashboard with summary counts, report cards, risks, warnings, and next actions.
 - Emits machine-readable JSON for local automation.
 - Writes a static, escaped HTML summary for local review or sharing.
-- Exports a standalone static HTML asset hub landing page with stable sections for sharing multiple report assets.
+- Exports a standalone static HTML asset hub landing page with stable sections and deterministic health/trend badges for sharing multiple report assets.
 - Compares current output against a previous JSON dashboard to surface regressions.
 - Includes score trend deltas from one or more `agent-context-audit compare` JSON files.
 
@@ -81,7 +81,7 @@ python -m agent_context_dashboard examples/reports --compare examples/compare.js
 python -m agent_context_dashboard examples/reports --format json --output examples/DASHBOARD.json --hub examples/ASSET_HUB.html
 ```
 
-The hub page includes stable anchors for `Overview`, `Asset Matrix`, `Trend Signals`, `Verification Commands`, and `Source Reports`. When hub export is requested with JSON output, the JSON dashboard includes a `hub` object with the hub path, generated timestamp, and input count. The generated page is a local static artifact; it does not require GitHub Actions, SaaS callbacks, telemetry, tokens, or repository workflow permissions.
+The hub page includes stable anchors for `Overview`, `Asset Matrix`, `Trend Signals`, `Verification Commands`, and `Source Reports`. It also renders deterministic header badges for overall health and compare-score trend state. When hub export is requested with JSON output, the JSON dashboard includes a `hub` object with the hub path, generated timestamp, input count, and the same badge data under `hub.badges`. The generated page is a local static artifact; it does not require GitHub Actions, SaaS callbacks, telemetry, tokens, or repository workflow permissions.
 
 See `examples/ASSET_HUB.md` for a synthetic hub export command and expected section list.
 

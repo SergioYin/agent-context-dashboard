@@ -303,6 +303,10 @@ class LoadingAndCliTests(unittest.TestCase):
             self.assertIn("Warnings", html)
             self.assertIn("agent-context-lint", html)
             self.assertIn("Owner missing", html)
+            self.assertIn('aria-label="Hub badges"', html)
+            self.assertIn("<strong>Health</strong>: risk", html)
+            self.assertIn("<strong>Trend</strong>: improving", html)
+            self.assertIn("+5 score delta; 1 improved entry.", html)
             self.assertIn(compare_path.as_posix(), html)
             self.assertIn("python -m unittest", html)
 
@@ -325,6 +329,23 @@ class LoadingAndCliTests(unittest.TestCase):
             self.assertEqual(payload["hub"]["path"], hub.as_posix())
             self.assertEqual(payload["hub"]["input_count"], 1)
             self.assertEqual(payload["hub"]["generated_at"], payload["generated_at"])
+            self.assertEqual(
+                payload["hub"]["badges"],
+                [
+                    {
+                        "label": "Health",
+                        "message": "0 risky reports; 0 warnings.",
+                        "status": "pass",
+                        "value": "pass",
+                    },
+                    {
+                        "label": "Trend",
+                        "message": "No compare trend inputs were provided.",
+                        "status": "unknown",
+                        "value": "no trend data",
+                    },
+                ],
+            )
             self.assertTrue(hub.exists())
 
     def test_hub_export_preserves_markdown_and_html_outputs(self) -> None:

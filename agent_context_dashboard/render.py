@@ -157,6 +157,7 @@ def render_hub_html(
     overall_status = _overall_status(cards, comparison)
     risk_items = _risk_payload(cards)
     trend_summary = compare_trends_summary(compare_trends or [])
+    badges = _hub_badges(cards, comparison, compare_trends or [])
     source_label = input_dir or "."
 
     parts = [
@@ -176,6 +177,7 @@ def render_hub_html(
         "<h1>Agent Context Asset Hub</h1>",
         f"<p>Generated: <time datetime=\"{_h(stamp_text)}\">{_h(stamp_text)}</time></p>",
         f'<p class="status status-{_h(overall_status)}">Overall status: {_h(overall_status.replace("_", " "))}</p>',
+        _render_hub_badges(badges),
         "</header>",
         '<nav aria-label="Hub sections">',
         '<a href="#overview">Overview</a> ',
@@ -292,6 +294,7 @@ def dashboard_payload(
             "path": hub_path,
             "generated_at": stamp_text,
             "input_count": len(cards),
+            "badges": _hub_badges(cards, comparison, compare_trends or []),
         }
     if comparison is not None:
         payload["comparison"] = comparison_payload(comparison)
@@ -645,6 +648,76 @@ def _render_hub_asset_matrix(cards: list[ReportCard]) -> list[str]:
     return lines
 
 
+def _hub_badges(
+    cards: list[ReportCard],
+    comparison: ComparisonResult | None = None,
+    compare_trends: list[CompareTrend] | None = None,
+) -> list[dict[str, str]]:
+    summary = _summary_counts(cards)
+    overall_status = _overall_status(cards, comparison)
+    trends = compare_trends or []
+    trend_summary = compare_trends_summary(trends)
+    total_score_delta = float(trend_summary["total_score_delta"])
+
+    if not trends:
+        trend_value = "no trend data"
+        trend_status = "unknown"
+        trend_message = "No compare trend inputs were provided."
+    elif trend_summary["regressed_entries"] or total_score_delta < 0:
+        trend_value = "regressing"
+        trend_status = "regression"
+        trend_message = (
+            f"{_signed_number(total_score_delta)} score delta; "
+            f"{trend_summary['regressed_entries']} regressed entr"
+            f"{'y' if trend_summary['regressed_entries'] == 1 else 'ies'}."
+        )
+    elif trend_summary["improved_entries"] or total_score_delta > 0:
+        trend_value = "improving"
+        trend_status = "pass"
+        trend_message = (
+            f"{_signed_number(total_score_delta)} score delta; "
+            f"{trend_summary['improved_entries']} improved entr"
+            f"{'y' if trend_summary['improved_entries'] == 1 else 'ies'}."
+        )
+    else:
+        trend_value = "stable"
+        trend_status = "pass"
+        trend_message = "0 score delta; no regressed entries."
+
+    return [
+        {
+            "label": "Health",
+            "value": overall_status.replace("_", " "),
+            "status": overall_status,
+            "message": (
+                f"{summary['reports_with_risk']} risky report"
+                f"{'' if summary['reports_with_risk'] == 1 else 's'}; "
+                f"{summary['warnings']} warning"
+                f"{'' if summary['warnings'] == 1 else 's'}."
+            ),
+        },
+        {
+            "label": "Trend",
+            "value": trend_value,
+            "status": trend_status,
+            "message": trend_message,
+        },
+    ]
+
+
+def _render_hub_badges(badges: list[dict[str, str]]) -> str:
+    parts = ['<div class="badge-row" aria-label="Hub badges">']
+    for badge in badges:
+        parts.append(
+            f'<span class="badge badge-{_h(_status_class(badge["status"]))}">'
+            f'<strong>{_h(badge["label"])}</strong>: {_h(badge["value"])}'
+            f'<small>{_h(badge["message"])}</small>'
+            "</span>"
+        )
+    parts.append("</div>")
+    return "".join(parts)
+
+
 def _render_hub_trend_table(trends: list[CompareTrend]) -> list[str]:
     lines = [
         '<div class="table-wrap">',
@@ -765,6 +838,13 @@ th { background: var(--soft); }
 .status-pass { color: var(--ok); }
 .status-risk, .status-warning, .status-warn, .status-unknown { color: var(--risk); }
 .status-regression, .status-error, .status-fail, .status-failed, .status-blocked { color: var(--bad); }
+.badge-row { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 14px; }
+.badge { border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; background: var(--soft); min-width: 180px; }
+.badge strong { display: inline; }
+.badge small { display: block; color: var(--muted); font-weight: 400; margin-top: 2px; }
+.badge-pass { border-color: #2da44e; }
+.badge-risk, .badge-warning, .badge-warn, .badge-unknown { border-color: #fb8500; }
+.badge-regression, .badge-error, .badge-fail, .badge-failed, .badge-blocked { border-color: #cf222e; }
 .regression { color: var(--bad); }
 ul { padding-left: 1.4rem; }
 li { margin: 0.35rem 0; }

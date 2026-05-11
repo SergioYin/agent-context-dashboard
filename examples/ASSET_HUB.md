@@ -14,4 +14,9 @@ The generated hub includes these stable sections:
 - `Verification Commands`
 - `Source Reports`
 
+The hub header also includes deterministic badges:
+
+- `Health`: derived from normalized report status, warnings, unknown schemas, and baseline regressions.
+- `Trend`: derived from compare-score deltas when `--compare` inputs are provided, or `no trend data` otherwise.
+
 The example inputs are synthetic and contain no secrets or token-looking strings.
