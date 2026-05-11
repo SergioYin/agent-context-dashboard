@@ -1,0 +1,21 @@
+{
+  "root": "/work/repo-gamma-context",
+  "scanned_files": ["AGENTS.md"],
+  "issues": [
+    {
+      "severity": "warn",
+      "code": "missing_validation",
+      "message": "Validation command list is missing.",
+      "path": "AGENTS.md"
+    }
+  ],
+  "summary": {
+    "files_scanned": 1,
+    "issues": 1,
+    "error": 0,
+    "warn": 1,
+    "info": 0,
+    "average_score": 84.0
+  },
+  "exit_code": 0
+}

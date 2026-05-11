@@ -1,0 +1,10 @@
+{
+  "baseline_score": 87,
+  "current_score": 91,
+  "changed_file_count": 4,
+  "added_file_count": 1,
+  "removed_file_count": 0,
+  "files_improved_count": 2,
+  "files_regressed_count": 0,
+  "rule_issue_delta": -2
+}

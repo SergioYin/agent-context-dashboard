@@ -8,7 +8,7 @@ from pathlib import Path
 from . import __version__
 from .compare import ComparisonResult, compare_to_baseline, load_baseline, load_compare_trends
 from .models import ReportCard
-from .render import render_html, render_hub_html, render_json, render_markdown
+from .render import render_badge_snippets, render_html, render_hub_html, render_json, render_markdown
 from .reports import DashboardError, load_reports
 
 
@@ -21,6 +21,7 @@ def build_dashboard(
     html_output: Path | None = None,
     compare: list[Path] | None = None,
     hub: Path | None = None,
+    badge_snippets: Path | None = None,
 ) -> str:
     cards = load_reports(input_dir, recursive=recursive)
     comparison = compare_to_baseline(cards, load_baseline(baseline)) if baseline else None
@@ -55,6 +56,18 @@ def build_dashboard(
                 comparison=comparison,
                 compare_trends=compare_trends,
                 input_dir=input_dir.as_posix(),
+            ),
+            encoding="utf-8",
+        )
+    if badge_snippets:
+        badge_snippets.parent.mkdir(parents=True, exist_ok=True)
+        badge_snippets.write_text(
+            render_badge_snippets(
+                cards,
+                generated_at=generated_at,
+                comparison=comparison,
+                compare_trends=compare_trends,
+                hub_href=hub.as_posix() if hub else None,
             ),
             encoding="utf-8",
         )
@@ -107,6 +120,18 @@ def main(argv: list[str] | None = None) -> int:
                 ),
                 encoding="utf-8",
             )
+        if args.badge_snippets:
+            args.badge_snippets.parent.mkdir(parents=True, exist_ok=True)
+            args.badge_snippets.write_text(
+                render_badge_snippets(
+                    cards,
+                    generated_at=generated_at,
+                    comparison=comparison,
+                    compare_trends=compare_trends,
+                    hub_href=args.hub.as_posix() if args.hub else None,
+                ),
+                encoding="utf-8",
+            )
     except DashboardError as exc:
         print(f"agent-context-dashboard: error: {exc}", file=sys.stderr)
         return 2
@@ -130,6 +155,11 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("-o", "--output", type=Path, help="Write dashboard output to this file.")
     parser.add_argument("--html-output", type=Path, help="Also write a static HTML dashboard summary to this file.")
     parser.add_argument("--hub", type=Path, help="Also write a standalone static HTML asset hub landing page.")
+    parser.add_argument(
+        "--badge-snippets",
+        type=Path,
+        help="Also write static Markdown and HTML badge snippets for README or release note embedding.",
+    )
     parser.add_argument("--format", choices=("markdown", "json"), default="markdown", help="Dashboard output format.")
     parser.add_argument("--baseline", type=Path, help="Compare against a prior JSON dashboard produced by --format json.")
     parser.add_argument(

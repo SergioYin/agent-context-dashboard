@@ -9,7 +9,7 @@ from pathlib import Path
 
 from agent_context_dashboard.cli import _has_strict_failures, main
 from agent_context_dashboard.compare import ComparisonItem, ComparisonResult, compare_to_baseline, load_baseline
-from agent_context_dashboard.render import render_html, render_hub_html, render_json
+from agent_context_dashboard.render import render_badge_snippets, render_html, render_hub_html, render_json
 from agent_context_dashboard.reports import ReportParseError, load_reports, normalize_report
 
 
@@ -297,7 +297,14 @@ class LoadingAndCliTests(unittest.TestCase):
             html = hub.read_text(encoding="utf-8")
             self.assertIn("<!doctype html>", html)
             self.assertIn("Agent Context Asset Hub", html)
-            for section_id in ("overview", "asset-matrix", "trend-signals", "verification-commands", "source-reports"):
+            for section_id in (
+                "overview",
+                "asset-matrix",
+                "trend-signals",
+                "badge-snippets",
+                "verification-commands",
+                "source-reports",
+            ):
                 self.assertIn(f'id="{section_id}"', html)
             self.assertIn("Reports scanned", html)
             self.assertIn("Warnings", html)
@@ -307,6 +314,8 @@ class LoadingAndCliTests(unittest.TestCase):
             self.assertIn("<strong>Health</strong>: risk", html)
             self.assertIn("<strong>Trend</strong>: improving", html)
             self.assertIn("+5 score delta; 1 improved entry.", html)
+            self.assertIn("Agent Context Health", html)
+            self.assertIn("Static snippets", html)
             self.assertIn(compare_path.as_posix(), html)
             self.assertIn("python -m unittest", html)
 
@@ -346,7 +355,48 @@ class LoadingAndCliTests(unittest.TestCase):
                     },
                 ],
             )
+            self.assertEqual(
+                payload["hub"]["snippets"]["markdown"][0],
+                f"[**Agent Context Health:** pass]({hub.as_posix()}) - 0 risky reports; 0 warnings.",
+            )
+            self.assertIn("<a href=", payload["hub"]["snippets"]["html"][0])
             self.assertTrue(hub.exists())
+
+    def test_cli_writes_badge_snippet_file(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            reports = root / "reports"
+            reports.mkdir()
+            (reports / "audit.json").write_text(
+                json.dumps({"tool": {"name": "agent-context-audit"}, "overall_score": 100, "findings": []}),
+                encoding="utf-8",
+            )
+            hub = root / "asset-hub.html"
+            snippets = root / "badges.md"
+            output = root / "dashboard.md"
+
+            exit_code = main(
+                [str(reports), "--output", str(output), "--hub", str(hub), "--badge-snippets", str(snippets)]
+            )
+
+            self.assertEqual(exit_code, 0)
+            text = snippets.read_text(encoding="utf-8")
+            self.assertIn("# Agent Context Badge Snippets", text)
+            self.assertIn("[**Agent Context Health:** pass]", text)
+            self.assertIn(hub.as_posix(), text)
+            self.assertIn("<span style=", text)
+
+    def test_badge_snippet_renderer_defaults_to_hub_filename(self) -> None:
+        card = normalize_report(
+            Path("lint.json"),
+            {"scanned_files": ["AGENTS.md"], "summary": {"average_score": 100}, "issues": []},
+        )
+
+        snippets = render_badge_snippets([card])
+
+        self.assertIn("These snippets are static and local-friendly.", snippets)
+        self.assertIn("[**Agent Context Health:** pass](ASSET_HUB.html)", snippets)
+        self.assertIn('href="ASSET_HUB.html"', snippets)
 
     def test_hub_export_preserves_markdown_and_html_outputs(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

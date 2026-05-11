@@ -144,6 +144,34 @@ def render_html(
     return "\n".join(parts)
 
 
+def render_badge_snippets(
+    cards: list[ReportCard],
+    generated_at: datetime | None = None,
+    comparison: ComparisonResult | None = None,
+    compare_trends: list[CompareTrend] | None = None,
+    hub_href: str | None = None,
+) -> str:
+    stamp = generated_at or datetime.now(timezone.utc)
+    stamp_text = stamp.replace(microsecond=0).isoformat()
+    snippets = _badge_snippets(_hub_badges(cards, comparison, compare_trends or []), hub_href=hub_href)
+
+    lines = [
+        "# Agent Context Badge Snippets",
+        "",
+        f"Generated: {stamp_text}",
+        "",
+        "These snippets are static and local-friendly. They do not call remote badge services.",
+        "",
+        "## Markdown",
+        "",
+    ]
+    lines.extend(f"- {snippet}" for snippet in snippets["markdown"])
+    lines.extend(["", "## HTML", ""])
+    for snippet in snippets["html"]:
+        lines.extend(["```html", snippet, "```", ""])
+    return "\n".join(lines)
+
+
 def render_hub_html(
     cards: list[ReportCard],
     generated_at: datetime | None = None,
@@ -158,6 +186,7 @@ def render_hub_html(
     risk_items = _risk_payload(cards)
     trend_summary = compare_trends_summary(compare_trends or [])
     badges = _hub_badges(cards, comparison, compare_trends or [])
+    snippets = _badge_snippets(badges, hub_href="#overview")
     source_label = input_dir or "."
 
     parts = [
@@ -183,6 +212,7 @@ def render_hub_html(
         '<a href="#overview">Overview</a> ',
         '<a href="#asset-matrix">Asset Matrix</a> ',
         '<a href="#trend-signals">Trend Signals</a> ',
+        '<a href="#badge-snippets">Badge Snippets</a> ',
         '<a href="#verification-commands">Verification Commands</a> ',
         '<a href="#source-reports">Source Reports</a>',
         "</nav>",
@@ -238,6 +268,8 @@ def render_hub_html(
         parts.append("<h3>Baseline Comparison</h3>")
         parts.extend(_render_html_comparison(comparison)[2:-1])
     parts.append("</section>")
+
+    parts.extend(_render_hub_badge_snippets(snippets))
 
     parts.extend(
         [
@@ -296,6 +328,7 @@ def dashboard_payload(
             "input_count": len(cards),
             "badges": _hub_badges(cards, comparison, compare_trends or []),
         }
+        payload["hub"]["snippets"] = _badge_snippets(payload["hub"]["badges"], hub_href=hub_path)
     if comparison is not None:
         payload["comparison"] = comparison_payload(comparison)
     if compare_trends:
@@ -718,6 +751,59 @@ def _render_hub_badges(badges: list[dict[str, str]]) -> str:
     return "".join(parts)
 
 
+def _badge_snippets(badges: list[dict[str, str]], hub_href: str | None = None) -> dict[str, list[str]]:
+    href = hub_href or "ASSET_HUB.html"
+    markdown: list[str] = []
+    html: list[str] = []
+    for badge in badges:
+        label = f"Agent Context {badge['label']}"
+        text = f"{label}: {badge['value']} - {badge['message']}"
+        markdown.append(f"[**{_markdown_text(label)}:** {_markdown_text(badge['value'])}]({href}) - {_markdown_text(badge['message'])}")
+        html.append(
+            f'<a href="{_attr(href)}" aria-label="{_attr(text)}">'
+            f'<span style="{_attr(_badge_inline_style(badge["status"]))}">'
+            f'<strong>{_h(label)}</strong>: {_h(badge["value"])}'
+            f'<small style="display:block;font-weight:400;margin-top:2px;">{_h(badge["message"])}</small>'
+            "</span></a>"
+        )
+    return {"markdown": markdown, "html": html}
+
+
+def _render_hub_badge_snippets(snippets: dict[str, list[str]]) -> list[str]:
+    lines = [
+        '<section id="badge-snippets" aria-labelledby="badge-snippets-heading">',
+        '<h2 id="badge-snippets-heading">Badge Snippets</h2>',
+        "<p>Static snippets for READMEs, release notes, and handoff documents.</p>",
+        "<h3>Markdown</h3>",
+        "<pre><code>",
+    ]
+    lines.extend(_h(snippet) for snippet in snippets["markdown"])
+    lines.extend(["</code></pre>", "<h3>HTML</h3>"])
+    for snippet in snippets["html"]:
+        lines.extend(["<pre><code>", _h(snippet), "</code></pre>"])
+    lines.append("</section>")
+    return lines
+
+
+def _badge_inline_style(status: str) -> str:
+    border = {
+        "pass": "#2da44e",
+        "risk": "#fb8500",
+        "warning": "#fb8500",
+        "warn": "#fb8500",
+        "unknown": "#fb8500",
+        "regression": "#cf222e",
+        "error": "#cf222e",
+        "blocked": "#cf222e",
+    }.get(_status_class(status), "#d8dee4")
+    return (
+        "display:inline-block;border:1px solid "
+        f"{border};border-radius:6px;padding:8px 10px;background:#f6f8fa;"
+        "color:#24292f;font:14px/1.4 -apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;"
+        "text-decoration:none;"
+    )
+
+
 def _render_hub_trend_table(trends: list[CompareTrend]) -> list[str]:
     lines = [
         '<div class="table-wrap">',
@@ -792,6 +878,14 @@ def _json_safe(value: Any) -> Any:
 
 def _h(value: Any) -> str:
     return escape(str(value), quote=True)
+
+
+def _attr(value: Any) -> str:
+    return escape(str(value), quote=True)
+
+
+def _markdown_text(value: str) -> str:
+    return value.replace("\\", "\\\\").replace("[", "\\[").replace("]", "\\]")
 
 
 def _status_class(status: str) -> str:

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "agent-context-dashboard"
-version = "0.4.3"
+version = "0.4.4"
 description = "Local Markdown, JSON, and HTML health dashboard for AI-agent context report files."
 readme = "README.md"
 requires-python = ">=3.9"

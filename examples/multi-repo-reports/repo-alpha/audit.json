@@ -1,0 +1,14 @@
+{
+  "tool": {"name": "agent-context-audit", "version": "0.1.1"},
+  "scanned_root": "/work/repo-alpha-context",
+  "overall_score": 96,
+  "grade": "A",
+  "summary": {
+    "score": 96,
+    "grade": "A",
+    "categories_passed": 10,
+    "categories_total": 10,
+    "warnings": 0
+  },
+  "findings": []
+}

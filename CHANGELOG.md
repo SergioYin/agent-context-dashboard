@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.4
+
+- Added `--badge-snippets PATH` for writing static Markdown and HTML badge snippets that link to the generated asset hub.
+- Added a `Badge Snippets` section to static asset hub HTML exports and included snippet data under `hub.snippets` in JSON dashboards when `--hub` is used.
+- Added a synthetic recursive multi-repo fixture for asset hub and dashboard examples.
+- Expanded selfcheck and tests to cover badge snippets, hub snippet sections, and multi-repo recursive sample output.
+
 ## 0.4.3
 
 - Added deterministic Health and Trend badges to static asset hub HTML exports.
